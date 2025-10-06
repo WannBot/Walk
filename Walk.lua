@@ -1,10 +1,4 @@
---// WindUI Full Path System
--- Pastikan kamu pakai executor yang support readfile(), writefile(), loadstring(), dll
-
--- ✅ Load WindUI dari repo GitHub Footagesus
-local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/refs/heads/main/Example.lua"))()
-
--- ✅ Setup services
+--// LocalScript: WindUI Full Control
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
@@ -14,29 +8,50 @@ local char = player.Character or player.CharacterAdded:Wait()
 local hum = char:WaitForChild("Humanoid")
 local hrp = char:WaitForChild("HumanoidRootPart")
 
--- ✅ State
+-- ✅ Load WindUI dari file inti (src/init.lua)
+local WindUI = loadstring(game:HttpGet("https://raw.githubusercontent.com/Footagesus/WindUI/refs/heads/main/src/init.lua"))()
+
+-------------------------------------------------------
+-- 🧱 WINDOW SETUP
+-------------------------------------------------------
+local Window = WindUI:CreateWindow({
+	Name = "Antartika Path Controller",
+	ConfigurationSaving = false
+})
+
+-------------------------------------------------------
+-- ⚙️ STATE
+-------------------------------------------------------
 local walkEnabled, jumpEnabled, noclipEnabled = false, false, false
 local walkSpeedValue, jumpPowerValue = 16, 50
 local playAll, autoWalkActive = false, false
 
--- ✅ Utility
-local function applyWalk()
-	if walkEnabled then hum.WalkSpeed = walkSpeedValue else hum.WalkSpeed = 16 end
+-------------------------------------------------------
+-- 🧩 UTILITIES
+-------------------------------------------------------
+local function applyWalkSpeed()
+	if hum then
+		hum.WalkSpeed = walkEnabled and walkSpeedValue or 16
+	end
 end
-local function applyJump()
-	if jumpEnabled then hum.JumpPower = jumpPowerValue else hum.JumpPower = 50 end
+
+local function applyJumpPower()
+	if hum then
+		hum.JumpPower = jumpEnabled and jumpPowerValue or 50
+	end
 end
-local function stopWalk()
+
+local function stopPath()
 	autoWalkActive = false
 end
+
 local function playPathFile(filename)
 	if not isfile(filename .. ".json") then
-		warn("❌ File path tidak ditemukan:", filename)
+		warn("File tidak ditemukan:", filename)
 		return
 	end
 	local json = readfile(filename .. ".json")
 	local data = HttpService:JSONDecode(json)
-	print("[AutoWalk] Memainkan:", filename)
 	autoWalkActive = true
 	for _, p in ipairs(data) do
 		if not autoWalkActive then break end
@@ -47,7 +62,6 @@ local function playPathFile(filename)
 	autoWalkActive = false
 end
 
--- ✅ Noclip system
 RunService.Stepped:Connect(function()
 	if noclipEnabled and player.Character then
 		for _, part in ipairs(player.Character:GetDescendants()) do
@@ -58,25 +72,19 @@ RunService.Stepped:Connect(function()
 	end
 end)
 
------------------------------------------------------------
--- 🟢 WINDOW + TAB SETUP (WindUI)
------------------------------------------------------------
-local Window = WindUI:CreateWindow({
-	Name = "Path Controller | WindUI GitHub",
-	ConfigurationSaving = false
-})
-
--- 🔹 TAB 1: MAIN FEATURE
+-------------------------------------------------------
+-- 🟢 TAB 1: MAIN FEATURE
+-------------------------------------------------------
 local TabMain = Window:CreateTab("Main Fiture")
 
-TabMain:CreateLabel("🏃 Walkspeed Control")
+TabMain:CreateLabel("⚙️ WalkSpeed Control")
 TabMain:CreateDropdown({
 	Name = "Input Speed",
 	Options = {"10","16","25","35","50","75","100"},
 	CurrentOption = {"16"},
 	Callback = function(opt)
 		walkSpeedValue = tonumber(opt[1])
-		applyWalk()
+		applyWalkSpeed()
 	end
 })
 TabMain:CreateToggle({
@@ -84,18 +92,18 @@ TabMain:CreateToggle({
 	CurrentValue = false,
 	Callback = function(state)
 		walkEnabled = state
-		applyWalk()
+		applyWalkSpeed()
 	end
 })
 
-TabMain:CreateLabel("🦘 JumpPower Control")
+TabMain:CreateLabel("⚙️ JumpPower Control")
 TabMain:CreateDropdown({
 	Name = "Input Power",
 	Options = {"25","50","75","100","150","200"},
 	CurrentOption = {"50"},
 	Callback = function(opt)
 		jumpPowerValue = tonumber(opt[1])
-		applyJump()
+		applyJumpPower()
 	end
 })
 TabMain:CreateToggle({
@@ -103,7 +111,7 @@ TabMain:CreateToggle({
 	CurrentValue = false,
 	Callback = function(state)
 		jumpEnabled = state
-		applyJump()
+		applyJumpPower()
 	end
 })
 
@@ -116,15 +124,15 @@ TabMain:CreateToggle({
 	end
 })
 
------------------------------------------------------------
+-------------------------------------------------------
 -- 🧭 TAB 2: AUTO WALK
------------------------------------------------------------
+-------------------------------------------------------
 local TabAuto = Window:CreateTab("Auto Walk")
 
 TabAuto:CreateLabel("🗺️ MAP ANTARTIKA")
 
 TabAuto:CreateToggle({
-	Name = "PLAY ALL (1 → 4)",
+	Name = "PLAY ALL (Path 1 → 4)",
 	CurrentValue = false,
 	Callback = function(state)
 		playAll = state
@@ -140,7 +148,7 @@ TabAuto:CreateToggle({
 				playAll = false
 			end)
 		else
-			stopWalk()
+			stopPath()
 		end
 	end
 })
@@ -149,48 +157,47 @@ TabAuto:CreateToggle({
 	Name = "BC > CP1 (Path 1)",
 	CurrentValue = false,
 	Callback = function(state)
-		if state then playPathFile("Path1") else stopWalk() end
+		if state then playPathFile("Path1") else stopPath() end
 	end
 })
 TabAuto:CreateToggle({
 	Name = "CP1 > CP2 (Path 2)",
 	CurrentValue = false,
 	Callback = function(state)
-		if state then playPathFile("Path2") else stopWalk() end
+		if state then playPathFile("Path2") else stopPath() end
 	end
 })
 TabAuto:CreateToggle({
 	Name = "CP2 > CP3 (Path 3)",
 	CurrentValue = false,
 	Callback = function(state)
-		if state then playPathFile("Path3") else stopWalk() end
+		if state then playPathFile("Path3") else stopPath() end
 	end
 })
 TabAuto:CreateToggle({
 	Name = "CP3 > CP4 (Path 4)",
 	CurrentValue = false,
 	Callback = function(state)
-		if state then playPathFile("Path4") else stopWalk() end
+		if state then playPathFile("Path4") else stopPath() end
 	end
 })
 TabAuto:CreateToggle({
 	Name = "CP4 > FINISH (Path 5)",
 	CurrentValue = false,
 	Callback = function(state)
-		if state then playPathFile("Path5") else stopWalk() end
+		if state then playPathFile("Path5") else stopPath() end
 	end
 })
 
------------------------------------------------------------
+-------------------------------------------------------
 -- ⚙️ TAB 3: SETTINGS
------------------------------------------------------------
+-------------------------------------------------------
 local TabSetting = Window:CreateTab("Setting")
 
-TabSetting:CreateLabel("🎨 Tema UI")
-
+TabSetting:CreateLabel("🎨 Tema Wind UI")
 TabSetting:CreateDropdown({
 	Name = "Select Theme",
-	Options = {"Dark","Light","Emerald","Ocean","Crimson"},
+	Options = {"Dark","Light","Ocean","Emerald","Crimson"},
 	CurrentOption = {"Dark"},
 	Callback = function(opt)
 		if WindUI.SetTheme then
