@@ -29,6 +29,9 @@ local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer or Players.PlayerAdded:Wait()
 player:WaitForChild("PlayerGui")
 
+-- Link JSON utama berisi daftar semua path
+local AntartikaPathsURL = "https://raw.githubusercontent.com/WannBot/Walk/refs/heads/main/Antartika/antartika_paths.json"
+
 ----------------------------------------------------------
 -- STATE & DATA (disalin dari script lama)
 ----------------------------------------------------------
@@ -689,6 +692,63 @@ local Tabs = {
 local StatusBox = Tabs.Main:AddRightGroupbox("Status")
 local __statusLabel = StatusBox:AddLabel("Status: Idle")
 getfenv().__WS_STATUS_LABEL = __statusLabel
+
+-- Tab Auto Walk
+local autoWalkTab = Window:Tab("Auto Walk", "📍")
+
+autoWalkTab:Label("MAP ANTARTIKA")
+
+-- Tombol Play All
+autoWalkTab:Button("▶ Play All Path", function()
+    statusLabel:Set("Status: Playing")
+    local success, data = pcall(function()
+        return game:HttpGet(AntartikaPathsURL)
+    end)
+    if success then
+        local decoded = HttpService:JSONDecode(data)
+        if decoded.paths and typeof(decoded.paths) == "table" then
+            for i, pathUrl in ipairs(decoded.paths) do
+                if not playingAll then playingAll = true end
+                statusLabel:Set("Status: Loading Path " .. i)
+                local ok, pathData = pcall(function()
+                    return game:HttpGet(pathUrl)
+                end)
+                if ok then
+                    deserializePlatformData(pathData)
+                    statusLabel:Set("Status: Playing Path " .. i)
+                    task.spawn(function()
+                        replaying = true
+                        shouldStopReplay = false
+                        for _, platform in ipairs(platforms) do
+                            if shouldStopReplay then break end
+                            local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+                            if hum then
+                                hum:MoveTo(platform.Position + Vector3.new(0,3,0))
+                                hum.MoveToFinished:Wait()
+                            end
+                        end
+                    end)
+                    repeat task.wait() until not replaying or shouldStopReplay
+                else
+                    warn("Failed to load path:", pathUrl)
+                end
+                if shouldStopReplay then break end
+            end
+            statusLabel:Set("Status: Completed")
+        else
+            statusLabel:Set("Status: Invalid JSON format")
+        end
+    else
+        statusLabel:Set("Status: Failed to load paths")
+    end
+end)
+
+-- Tombol Stop
+autoWalkTab:Button("⛔ Stop Auto Walk", function()
+    shouldStopReplay = true
+    replaying = false
+    statusLabel:Set("Status: Stopped")
+end)
 
 -- ===== Tab Main Control
 local MC_L = Tabs.Main:AddLeftGroupbox("Actions")
