@@ -691,7 +691,7 @@ local ok, err = pcall(function()
 
     local HttpService = game:GetService("HttpService")
     local player = game.Players.LocalPlayer
-    local AntartikaPathsURL = "https://raw.githubusercontent.com/WannBot/WindUI/refs/heads/main/Antartika/antartika_paths.json"
+    local AntartikaPathsURL = "https://raw.githubusercontent.com/WannBot/Walk/refs/heads/main/Antartika/antartika_paths.json"
 
     -- buat grupbox di dalam tab
     local AutoGB = Tabs.Auto:AddLeftGroupbox("Map Antartika")
