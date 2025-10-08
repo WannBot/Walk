@@ -684,79 +684,12 @@ local Tabs = {
 	Data  = Window:AddTab("Data", "folder"),
 	List  = Window:AddTab("Platform List", "map"),
 	Theme = Window:AddTab("Setting", "settings"),
-	Auto  = Window:AddTab("Auto Walk", "map-pin"), -- ✅ Tab baru
 }
-
--- Link JSON utama berisi daftar semua path Antartika
-local AntartikaPathsURL = "https://raw.githubusercontent.com/WannBot/WindUI/refs/heads/main/Antartika/antartika_paths.json"
 
 -- 🔧 Status Label global (pojok bawah)
 local StatusBox = Tabs.Main:AddRightGroupbox("Status")
 local statusLabel = StatusBox:AddLabel("Status: Idle")
 getfenv().__WS_STATUS_LABEL = statusLabel
-
--- 🧭 Tab Auto Walk
-local autoWalkTab = Tabs.Auto
-autoWalkTab:AddLabel("MAP ANTARTIKA")
-
--- ▶ Tombol Play All Path
-autoWalkTab:AddButton("▶ Play All Path", function()
-	statusLabel:Set("Status: Playing")
-
-	local success, data = pcall(function()
-		return game:HttpGet(AntartikaPathsURL)
-	end)
-
-	if success then
-		local decoded = HttpService:JSONDecode(data)
-		if decoded.paths and typeof(decoded.paths) == "table" then
-			for i, pathUrl in ipairs(decoded.paths) do
-				statusLabel:Set("Status: Loading Path " .. i)
-				local ok, pathData = pcall(function()
-					return game:HttpGet(pathUrl)
-				end)
-
-				if ok then
-					deserializePlatformData(pathData)
-					statusLabel:Set("Status: Playing Path " .. i)
-
-					task.spawn(function()
-						replaying = true
-						shouldStopReplay = false
-
-						for _, platform in ipairs(platforms) do
-							if shouldStopReplay then break end
-							local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-							if hum then
-								hum:MoveTo(platform.Position + Vector3.new(0, 3, 0))
-								hum.MoveToFinished:Wait()
-							end
-						end
-					end)
-
-					repeat task.wait() until not replaying or shouldStopReplay
-				else
-					warn("❌ Gagal load path:", pathUrl)
-				end
-
-				if shouldStopReplay then break end
-			end
-
-			statusLabel:Set("Status: Completed ✅")
-		else
-			statusLabel:Set("Status: Invalid JSON format")
-		end
-	else
-		statusLabel:Set("Status: Failed to load paths")
-	end
-end)
-
--- ⛔ Tombol Stop Auto Walk
-autoWalkTab:AddButton("⛔ Stop Auto Walk", function()
-	shouldStopReplay = true
-	replaying = false
-	statusLabel:Set("Status: Stopped")
-end)
 
 -- ===== Tab Main Control
 local MC_L = Tabs.Main:AddLeftGroupbox("Actions")
