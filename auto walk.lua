@@ -682,6 +682,7 @@ local Window = Library:CreateWindow({
 })
 
 local Tabs = {
+    Auto  = Window:AddTab("Auto Walk", "map-pin"),
     Main  = Window:AddTab("Main Control", "zap"),
     Data  = Window:AddTab("Data", "folder"),
     List  = Window:AddTab("Platform List", "map"),
@@ -694,8 +695,7 @@ local __statusLabel = StatusBox:AddLabel("Status: Idle")
 getfenv().__WS_STATUS_LABEL = __statusLabel
 
 -- Tab Auto Walk
-local autoWalkTab = Window:Tab("Auto Walk", "📍")
-
+local autoWalkTab = Tabs.Auto
 autoWalkTab:Label("MAP ANTARTIKA")
 
 -- Tombol Play All
