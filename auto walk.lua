@@ -29,9 +29,6 @@ local HttpService = game:GetService("HttpService")
 local player = Players.LocalPlayer or Players.PlayerAdded:Wait()
 player:WaitForChild("PlayerGui")
 
--- Link JSON utama berisi daftar semua path
-local AntartikaPathsURL = "https://raw.githubusercontent.com/WannBot/Walk/refs/heads/main/Antartika/antartika_paths.json"
-
 ----------------------------------------------------------
 -- STATE & DATA (disalin dari script lama)
 ----------------------------------------------------------
@@ -681,73 +678,84 @@ local Window = Library:CreateWindow({
     ShowCustomCursor = true,
 })
 
+-- 🌍 Tambahan Tab Auto Walk
 local Tabs = {
-    Auto  = Window:AddTab("Auto Walk", "map-pin"),
-    Main  = Window:AddTab("Main Control", "zap"),
-    Data  = Window:AddTab("Data", "folder"),
-    List  = Window:AddTab("Platform List", "map"),
-    Theme = Window:AddTab("Setting", "settings"),
+	Main  = Window:AddTab("Main Control", "zap"),
+	Data  = Window:AddTab("Data", "folder"),
+	List  = Window:AddTab("Platform List", "map"),
+	Theme = Window:AddTab("Setting", "settings"),
+	Auto  = Window:AddTab("Auto Walk", "map-pin"), -- ✅ Tab baru
 }
 
--- ===== Status label global (pojok bawah)
+-- Link JSON utama berisi daftar semua path Antartika
+local AntartikaPathsURL = "https://raw.githubusercontent.com/WannBot/WindUI/refs/heads/main/Antartika/antartika_paths.json"
+
+-- 🔧 Status Label global (pojok bawah)
 local StatusBox = Tabs.Main:AddRightGroupbox("Status")
-local __statusLabel = StatusBox:AddLabel("Status: Idle")
-getfenv().__WS_STATUS_LABEL = __statusLabel
+local statusLabel = StatusBox:AddLabel("Status: Idle")
+getfenv().__WS_STATUS_LABEL = statusLabel
 
--- Tab Auto Walk
+-- 🧭 Tab Auto Walk
 local autoWalkTab = Tabs.Auto
-autoWalkTab:Label("MAP ANTARTIKA")
+autoWalkTab:AddLabel("MAP ANTARTIKA")
 
--- Tombol Play All
-autoWalkTab:Button("▶ Play All Path", function()
-    statusLabel:Set("Status: Playing")
-    local success, data = pcall(function()
-        return game:HttpGet(AntartikaPathsURL)
-    end)
-    if success then
-        local decoded = HttpService:JSONDecode(data)
-        if decoded.paths and typeof(decoded.paths) == "table" then
-            for i, pathUrl in ipairs(decoded.paths) do
-                if not playingAll then playingAll = true end
-                statusLabel:Set("Status: Loading Path " .. i)
-                local ok, pathData = pcall(function()
-                    return game:HttpGet(pathUrl)
-                end)
-                if ok then
-                    deserializePlatformData(pathData)
-                    statusLabel:Set("Status: Playing Path " .. i)
-                    task.spawn(function()
-                        replaying = true
-                        shouldStopReplay = false
-                        for _, platform in ipairs(platforms) do
-                            if shouldStopReplay then break end
-                            local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
-                            if hum then
-                                hum:MoveTo(platform.Position + Vector3.new(0,3,0))
-                                hum.MoveToFinished:Wait()
-                            end
-                        end
-                    end)
-                    repeat task.wait() until not replaying or shouldStopReplay
-                else
-                    warn("Failed to load path:", pathUrl)
-                end
-                if shouldStopReplay then break end
-            end
-            statusLabel:Set("Status: Completed")
-        else
-            statusLabel:Set("Status: Invalid JSON format")
-        end
-    else
-        statusLabel:Set("Status: Failed to load paths")
-    end
+-- ▶ Tombol Play All Path
+autoWalkTab:AddButton("▶ Play All Path", function()
+	statusLabel:Set("Status: Playing")
+
+	local success, data = pcall(function()
+		return game:HttpGet(AntartikaPathsURL)
+	end)
+
+	if success then
+		local decoded = HttpService:JSONDecode(data)
+		if decoded.paths and typeof(decoded.paths) == "table" then
+			for i, pathUrl in ipairs(decoded.paths) do
+				statusLabel:Set("Status: Loading Path " .. i)
+				local ok, pathData = pcall(function()
+					return game:HttpGet(pathUrl)
+				end)
+
+				if ok then
+					deserializePlatformData(pathData)
+					statusLabel:Set("Status: Playing Path " .. i)
+
+					task.spawn(function()
+						replaying = true
+						shouldStopReplay = false
+
+						for _, platform in ipairs(platforms) do
+							if shouldStopReplay then break end
+							local hum = player.Character and player.Character:FindFirstChildOfClass("Humanoid")
+							if hum then
+								hum:MoveTo(platform.Position + Vector3.new(0, 3, 0))
+								hum.MoveToFinished:Wait()
+							end
+						end
+					end)
+
+					repeat task.wait() until not replaying or shouldStopReplay
+				else
+					warn("❌ Gagal load path:", pathUrl)
+				end
+
+				if shouldStopReplay then break end
+			end
+
+			statusLabel:Set("Status: Completed ✅")
+		else
+			statusLabel:Set("Status: Invalid JSON format")
+		end
+	else
+		statusLabel:Set("Status: Failed to load paths")
+	end
 end)
 
--- Tombol Stop
-autoWalkTab:Button("⛔ Stop Auto Walk", function()
-    shouldStopReplay = true
-    replaying = false
-    statusLabel:Set("Status: Stopped")
+-- ⛔ Tombol Stop Auto Walk
+autoWalkTab:AddButton("⛔ Stop Auto Walk", function()
+	shouldStopReplay = true
+	replaying = false
+	statusLabel:Set("Status: Stopped")
 end)
 
 -- ===== Tab Main Control
