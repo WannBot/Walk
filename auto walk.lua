@@ -772,68 +772,59 @@ do
         ---------------------------------------------------------
         -- ▶ Play All Path
         ---------------------------------------------------------
-        AutoGB:AddButton("▶ Play All Path", function()
-            task.spawn(function()
-                if not envReady() then return end
-                if not PathsLoaded or #LoadedList == 0 then
-                    setStatus("Belum Load Path!")
-                    return
-                end
+        ---------------------------------------------------------
+-- ▶ Play All Path (pakai replayPlatforms() asli)
+---------------------------------------------------------
+AutoGB:AddButton("▶ Play All Path", function()
+    task.spawn(function()
+        if not envReady() then return end
+        if not PathsLoaded or #LoadedList == 0 then
+            setStatus("Belum Load Path!")
+            return
+        end
 
-                shouldStopReplay = false
-                replaying = true
-                setStatus("Playing...")
+        shouldStopReplay = false
+        replaying = true
+        setStatus("Playing...")
 
-                for i = 1, #LoadedList do
-                    if shouldStopReplay then break end
-                    local data = LoadedList[i]
-                    if not data or #data == 0 then
-                        warn("[AutoWalk] Data kosong di index " .. i)
-                        setStatus(("Data kosong (Path %d)"):format(i))
-                        break
-                    end
+        for i = 1, #LoadedList do
+            if shouldStopReplay then break end
+            local data = LoadedList[i]
+            if not data or #data == 0 then
+                setStatus(("Data kosong (Path %d)"):format(i))
+                break
+            end
 
-                    -- Validasi JSON dulu (biar kalau salah format, nggak crash)
-                    local okJSON, _ = pcall(function()
-                        return game:GetService("HttpService"):JSONDecode(data)
-                    end)
-                    if not okJSON then
-                        setStatus(("JSON invalid (Path %d)"):format(i))
-                        warn("[AutoWalk] JSON invalid pada Path " .. i)
-                        break
-                    end
-
-                    setStatus(("Playing Path %d"):format(i))
-                    local okDeser, deserErr = pcall(function()
-                        deserializePlatformData(data)
-                    end)
-                    if not okDeser then
-                        setStatus(("Deserialize error (Path %d)"):format(i))
-                        warn("[AutoWalk] Deserialize error: ", deserErr)
-                        break
-                    end
-
-                    -- Jalanin semua platform yang baru dimuat
-                    for _, platform in ipairs(platforms) do
-                        if shouldStopReplay then break end
-                        local char = game.Players.LocalPlayer.Character or game.Players.LocalPlayer.CharacterAdded:Wait()
-                        local hum = char and char:FindFirstChildOfClass("Humanoid")
-                        if hum then
-                            hum:MoveTo(platform.Position + Vector3.new(0, 3, 0))
-                            hum.MoveToFinished:Wait()
-                        end
-                    end
-
-                    setStatus(("Completed Path %d"):format(i))
-                    task.wait(0.25)
-                end
-
-                replaying = false
-                if not shouldStopReplay then
-                    setStatus("Completed ✅")
-                end
+            setStatus(("Loading Path %d"):format(i))
+            local ok, err = pcall(function()
+                deserializePlatformData(data)
             end)
-        end)
+            if not ok then
+                warn("[AutoWalk] Deserialize gagal:", err)
+                setStatus("Deserialize gagal")
+                break
+            end
+
+            -- 🔹 Gunakan fungsi replay asli
+            if typeof(replayPlatforms) == "function" then
+                replayPlatforms(1) -- mulai dari platform pertama
+            else
+                warn("[AutoWalk] replayPlatforms() tidak ditemukan")
+                setStatus("replayPlatforms() tidak ada di script utama")
+                break
+            end
+
+            if shouldStopReplay then break end
+            setStatus(("Completed Path %d"):format(i))
+            task.wait(0.3)
+        end
+
+        replaying = false
+        if not shouldStopReplay then
+            setStatus("Completed ✅")
+        end
+    end)
+end)
 
         ---------------------------------------------------------
         -- ⛔ Stop
