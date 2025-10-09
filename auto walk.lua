@@ -778,45 +778,103 @@ task.spawn(function()
                     task.wait(0.3)
                 end
 
-                isReplaying = false
-                if shouldStop then
-                    setAutoStatus("Stopped ⛔")
-                else
-                    setAutoStatus("Completed ✅")
-                end
+		-----------------------------------------------------
+-- ▶ PLAY (FULL + PAUSE / RESUME SUPPORT)
+-----------------------------------------------------
+local isPaused = false
+local pausedIndex = 1
+local pausedPosition = nil
+
+GLeft:AddButton("▶ Play", function()
+    task.spawn(function()
+        if isReplaying then return end
+        if #PathsLoaded == 0 then
+            setAutoStatus("No Path Loaded")
+            return
+        end
+
+        isReplaying, shouldStop, isPaused = true, false, false
+        setAutoStatus("Playing...")
+
+        for i, jsonData in ipairs(PathsLoaded) do
+            if shouldStop then break end
+
+            setAutoStatus(("Loading Path %d..."):format(i))
+            local okDes = pcall(function()
+                deserializePlatformData(jsonData)
             end)
-        end)
+            if not okDes then
+                warn("[AutoWalk] Deserialize error Path "..i)
+                continue
+            end
+
+            setAutoStatus(("Replaying Path %d ▶"):format(i))
+
+            -- simpan posisi awal sebelum play path ini
+            local resumeStartIndex = 1
+            if isPaused and pausedIndex > 1 then
+                resumeStartIndex = pausedIndex
+                isPaused = false
+                pausedIndex = 1
+            end
+
+            -- jalankan replay dari index sesuai (resumeStartIndex)
+            local okPlay = pcall(function()
+                ReplayFrom(resumeStartIndex)
+            end)
+            if not okPlay then
+                warn("[AutoWalk] Replay error Path "..i)
+            end
+
+            task.wait(0.3)
+        end
+
+        isReplaying = false
+        if shouldStop or isPaused then
+            setAutoStatus("Paused ⏸")
+        else
+            setAutoStatus("Completed ✅")
+        end
+    end)
+end)
 
 -----------------------------------------------------
 -- ⏸ PAUSE / ▶ RESUME
 -----------------------------------------------------
-local isPaused = false
-local pausedIndex = 1
-
 GLeft:AddButton("⏸ Pause / ▶ Resume", function()
-    if not isReplaying then
-        -- -- Belum mulai, abaikan klik pause/resume sebelum play
+    -- Jika belum play sama sekali
+    if not isReplaying and not isPaused then
         setAutoStatus("Not playing")
         return
     end
 
     if not isPaused then
         -------------------------------------------------
-        -- ⏸ PAUSE
+        -- PAUSE
         -------------------------------------------------
-        shouldStop = true         -- hentikan loop ReplayFrom
         isPaused = true
-        -- simpan posisi terakhir (PlatformIndex saat ini)
+        shouldStop = true  -- hentikan ReplayFrom loop
         pausedIndex = math.max(currentPlatformIndex, 1)
+
+        -- simpan posisi terakhir avatar di dunia
+        if character and character.PrimaryPart then
+            pausedPosition = character.PrimaryPart.CFrame
+        end
+
         stopForceMovement()
         setAutoStatus(("Paused at Platform %d ⏸"):format(pausedIndex))
     else
         -------------------------------------------------
-        -- ▶ RESUME
+        -- RESUME
         -------------------------------------------------
-        shouldStop = false
         isPaused = false
+        shouldStop = false
         setAutoStatus(("Resuming from Platform %d ▶"):format(pausedIndex))
+
+        -- pastikan karakter tetap di posisi terakhir
+        if pausedPosition and character and character.PrimaryPart then
+            character:SetPrimaryPartCFrame(pausedPosition)
+        end
 
         task.spawn(function()
             local ok, err = pcall(function()
@@ -829,12 +887,7 @@ GLeft:AddButton("⏸ Pause / ▶ Resume", function()
         end)
     end
 end)
-    end)
 
-    if not okInit then
-        warn("[AutoWalk Tab Init Error]:", errInit)
-    end
-end)
  
 -- 🔧 Status Label global (pojok bawah)
 local StatusBox = Tabs.Main:AddRightGroupbox("Status")
