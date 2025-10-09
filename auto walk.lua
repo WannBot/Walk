@@ -686,72 +686,169 @@ local Tabs = {
 }
 
 -------------------------------------------------------------
--- 🌍 TAB AUTO WALK (ambil langsung file path dari GitHub)
+-- 🌍 TAB AUTO WALK (GitHub RAW file, super-safe)
 -------------------------------------------------------------
-local HttpService = game:GetService("HttpService")
-local player = game.Players.LocalPlayer
+do
+    local ok, err = pcall(function()
+        -- Pakai icon "map" biar pasti ada
+        Tabs.Auto = Window:AddTab("Auto Walk", "map")
+        local AutoGB = Tabs.Auto:AddLeftGroupbox("MAP ANTARTIKA")
+        AutoGB:AddLabel("AUTO WALK CONTROL")
 
--- Path langsung dari repo kamu
-local AntartikaPaths = {
-    "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path1.json"
-	"https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path2.json"
-}
+        -- RAW GitHub yang benar (TANPA 'refs/heads')
+        local PATH_URLS = {
+            "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path1.json",
+            -- tambah lagi kalau ada:
+            -- "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path2.json",
+            -- "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path3.json",
+        }
 
-Tabs.Auto = Window:AddTab("Auto Walk", "map-pin")
-local AutoGB = Tabs.Auto:AddLeftGroupbox("MAP ANTARTIKA")
-AutoGB:AddLabel("AUTO WALK CONTROL")
-
--------------------------------------------------------------
--- ▶ Tombol Play Path
--------------------------------------------------------------
-AutoGB:AddButton("▶ Play Path", function()
-    task.spawn(function()
-        shouldStopReplay = false
-        replaying = true
-        statusLabel:Set("Status: Loading Path...")
-
-        for i, pathUrl in ipairs(AntartikaPaths) do
-            if shouldStopReplay then break end
-
-            local ok, pathData = pcall(function()
-                return game:HttpGet(pathUrl)
-            end)
-
-            if ok and pathData then
-                statusLabel:Set("Status: Playing Path " .. i)
-                deserializePlatformData(pathData)
-
-                for _, platform in ipairs(platforms) do
-                    if shouldStopReplay then break end
-                    local char = player.Character or player.CharacterAdded:Wait()
-                    local hum = char and char:FindFirstChildOfClass("Humanoid")
-                    if hum then
-                        hum:MoveTo(platform.Position + Vector3.new(0,3,0))
-                        hum.MoveToFinished:Wait()
-                    end
-                end
-
-                statusLabel:Set("Status: Completed Path " .. i)
-                task.wait(0.5)
+        -- Helper status aman (tidak bikin crash kalau label belum ada)
+        local function setStatus(txt)
+            if statusLabel and statusLabel.Set then
+                statusLabel:Set("Status: " .. txt)
             else
-                warn("[AutoWalk] ❌ Gagal ambil path:", pathUrl)
-                statusLabel:Set("Status: ❌ Gagal load Path " .. i)
+                print("[Status] " .. txt)
             end
         end
 
-        statusLabel:Set("Status: Completed ✅")
-        replaying = false
-    end)
-end)
+        -- Guard untuk fungsi & data dari script utama
+        local function envReady()
+            if type(deserializePlatformData) ~= "function" then
+                setStatus("deserializePlatformData belum ada")
+                warn("[AutoWalk] deserializePlatformData() belum terdefinisi di script utama.")
+                return false
+            end
+            if type(platforms) ~= "table" then
+                setStatus("platforms belum siap")
+                warn("[AutoWalk] 'platforms' belum tersedia di script utama.")
+                return false
+            end
+            return true
+        end
 
--------------------------------------------------------------
--- ⛔ Tombol Stop
--------------------------------------------------------------
-AutoGB:AddButton("⛔ Stop Auto Walk", function()
-    shouldStopReplay = true
-    replaying = false
-    statusLabel:Set("Status: Stopped")
-end)
+        -- Cache daftar URL yg sudah diload (opsional)
+        local LoadedList = {}
+        local PathsLoaded = false
+
+        ---------------------------------------------------------
+        -- 📥 Load All Path (ambil semua file tapi belum jalan)
+        ---------------------------------------------------------
+        AutoGB:AddButton("📥 Load All Path", function()
+            task.spawn(function()
+                setStatus("Loading All Paths...")
+                LoadedList = {}
+
+                for i, url in ipairs(PATH_URLS) do
+                    local okFetch, body = pcall(function()
+                        return game:HttpGet(url)
+                    end)
+                    if okFetch and body and #body > 0 then
+                        -- Deteksi jika salah URL (HTML dari GitHub)
+                        if body:find("<!DOCTYPE html>") or body:find("<html") then
+                            warn("[AutoWalk] Sepertinya URL salah/404 (HTML terdeteksi): " .. url)
+                            setStatus(("URL salah/404 (Path %d)"):format(i))
+                            return
+                        end
+                        LoadedList[i] = body
+                        print(("[AutoWalk] Loaded Path %d OK (%d bytes)"):format(i, #body))
+                        task.wait(0.1)
+                    else
+                        warn("[AutoWalk] Gagal ambil: " .. url)
+                        setStatus(("Gagal ambil Path %d"):format(i))
+                        return
+                    end
+                end
+
+                PathsLoaded = (#LoadedList == #PATH_URLS)
+                if PathsLoaded then
+                    setStatus(("Loaded %d path"):format(#LoadedList))
+                else
+                    setStatus("Sebagian path gagal")
+                end
+            end)
+        end)
+
+        ---------------------------------------------------------
+        -- ▶ Play All Path
+        ---------------------------------------------------------
+        AutoGB:AddButton("▶ Play All Path", function()
+            task.spawn(function()
+                if not envReady() then return end
+                if not PathsLoaded or #LoadedList == 0 then
+                    setStatus("Belum Load Path!")
+                    return
+                end
+
+                shouldStopReplay = false
+                replaying = true
+                setStatus("Playing...")
+
+                for i = 1, #LoadedList do
+                    if shouldStopReplay then break end
+                    local data = LoadedList[i]
+                    if not data or #data == 0 then
+                        warn("[AutoWalk] Data kosong di index " .. i)
+                        setStatus(("Data kosong (Path %d)"):format(i))
+                        break
+                    end
+
+                    -- Validasi JSON dulu (biar kalau salah format, nggak crash)
+                    local okJSON, _ = pcall(function()
+                        return game:GetService("HttpService"):JSONDecode(data)
+                    end)
+                    if not okJSON then
+                        setStatus(("JSON invalid (Path %d)"):format(i))
+                        warn("[AutoWalk] JSON invalid pada Path " .. i)
+                        break
+                    end
+
+                    setStatus(("Playing Path %d"):format(i))
+                    local okDeser, deserErr = pcall(function()
+                        deserializePlatformData(data)
+                    end)
+                    if not okDeser then
+                        setStatus(("Deserialize error (Path %d)"):format(i))
+                        warn("[AutoWalk] Deserialize error: ", deserErr)
+                        break
+                    end
+
+                    -- Jalanin semua platform yang baru dimuat
+                    for _, platform in ipairs(platforms) do
+                        if shouldStopReplay then break end
+                        local char = game.Players.LocalPlayer.Character or game.Players.LocalPlayer.CharacterAdded:Wait()
+                        local hum = char and char:FindFirstChildOfClass("Humanoid")
+                        if hum then
+                            hum:MoveTo(platform.Position + Vector3.new(0, 3, 0))
+                            hum.MoveToFinished:Wait()
+                        end
+                    end
+
+                    setStatus(("Completed Path %d"):format(i))
+                    task.wait(0.25)
+                end
+
+                replaying = false
+                if not shouldStopReplay then
+                    setStatus("Completed ✅")
+                end
+            end)
+        end)
+
+        ---------------------------------------------------------
+        -- ⛔ Stop
+        ---------------------------------------------------------
+        AutoGB:AddButton("⛔ Stop", function()
+            shouldStopReplay = true
+            replaying = false
+            setStatus("Stopped")
+        end)
+    end)
+
+    if not ok then
+        warn("[AutoWalk] Init error: ", err)
+    end
+end
  
 -- 🔧 Status Label global (pojok bawah)
 local StatusBox = Tabs.Main:AddRightGroupbox("Status")
