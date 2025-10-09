@@ -787,15 +787,48 @@ task.spawn(function()
             end)
         end)
 
-        -----------------------------------------------------
-        -- ⛔ STOP
-        -----------------------------------------------------
-        GLeft:AddButton("⛔ Stop", function()
-            shouldStop = true
-            isReplaying = false
-            pcall(stopForceMovement)
-            setAutoStatus("Stopped ⛔")
+-----------------------------------------------------
+-- ⏸ PAUSE / ▶ RESUME
+-----------------------------------------------------
+local isPaused = false
+local pausedIndex = 1
+
+GLeft:AddButton("⏸ Pause / ▶ Resume", function()
+    if not isReplaying then
+        -- -- Belum mulai, abaikan klik pause/resume sebelum play
+        setAutoStatus("Not playing")
+        return
+    end
+
+    if not isPaused then
+        -------------------------------------------------
+        -- ⏸ PAUSE
+        -------------------------------------------------
+        shouldStop = true         -- hentikan loop ReplayFrom
+        isPaused = true
+        -- simpan posisi terakhir (PlatformIndex saat ini)
+        pausedIndex = math.max(currentPlatformIndex, 1)
+        stopForceMovement()
+        setAutoStatus(("Paused at Platform %d ⏸"):format(pausedIndex))
+    else
+        -------------------------------------------------
+        -- ▶ RESUME
+        -------------------------------------------------
+        shouldStop = false
+        isPaused = false
+        setAutoStatus(("Resuming from Platform %d ▶"):format(pausedIndex))
+
+        task.spawn(function()
+            local ok, err = pcall(function()
+                ReplayFrom(pausedIndex)
+            end)
+            if not ok then
+                warn("[AutoWalk] Resume error:", err)
+                setAutoStatus("Resume Error ❌")
+            end
         end)
+    end
+end)
     end)
 
     if not okInit then
