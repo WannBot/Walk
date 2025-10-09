@@ -685,6 +685,73 @@ local Tabs = {
 	Theme = Window:AddTab("Setting", "settings"),
 }
 
+-------------------------------------------------------------
+-- 🌍 TAB AUTO WALK (ambil langsung file path dari GitHub)
+-------------------------------------------------------------
+local HttpService = game:GetService("HttpService")
+local player = game.Players.LocalPlayer
+
+-- Path langsung dari repo kamu
+local AntartikaPaths = {
+    "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path1.json"
+	"https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path2.json"
+}
+
+Tabs.Auto = Window:AddTab("Auto Walk", "map-pin")
+local AutoGB = Tabs.Auto:AddLeftGroupbox("MAP ANTARTIKA")
+AutoGB:AddLabel("AUTO WALK CONTROL")
+
+-------------------------------------------------------------
+-- ▶ Tombol Play Path
+-------------------------------------------------------------
+AutoGB:AddButton("▶ Play Path", function()
+    task.spawn(function()
+        shouldStopReplay = false
+        replaying = true
+        statusLabel:Set("Status: Loading Path...")
+
+        for i, pathUrl in ipairs(AntartikaPaths) do
+            if shouldStopReplay then break end
+
+            local ok, pathData = pcall(function()
+                return game:HttpGet(pathUrl)
+            end)
+
+            if ok and pathData then
+                statusLabel:Set("Status: Playing Path " .. i)
+                deserializePlatformData(pathData)
+
+                for _, platform in ipairs(platforms) do
+                    if shouldStopReplay then break end
+                    local char = player.Character or player.CharacterAdded:Wait()
+                    local hum = char and char:FindFirstChildOfClass("Humanoid")
+                    if hum then
+                        hum:MoveTo(platform.Position + Vector3.new(0,3,0))
+                        hum.MoveToFinished:Wait()
+                    end
+                end
+
+                statusLabel:Set("Status: Completed Path " .. i)
+                task.wait(0.5)
+            else
+                warn("[AutoWalk] ❌ Gagal ambil path:", pathUrl)
+                statusLabel:Set("Status: ❌ Gagal load Path " .. i)
+            end
+        end
+
+        statusLabel:Set("Status: Completed ✅")
+        replaying = false
+    end)
+end)
+
+-------------------------------------------------------------
+-- ⛔ Tombol Stop
+-------------------------------------------------------------
+AutoGB:AddButton("⛔ Stop Auto Walk", function()
+    shouldStopReplay = true
+    replaying = false
+    statusLabel:Set("Status: Stopped")
+end)
  
 -- 🔧 Status Label global (pojok bawah)
 local StatusBox = Tabs.Main:AddRightGroupbox("Status")
