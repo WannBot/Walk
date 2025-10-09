@@ -743,92 +743,52 @@ task.spawn(function()
         end)
 
 				---------------------------------------------------------
--- ▶ PLAY ALL PATHS (fix aman)
----------------------------------------------------------
-GLeft:AddButton("▶ Play", function()
-    task.spawn(function()
-        local okPlay, errPlay = pcall(function()
-            if isReplaying then
-                setAutoStatus("Already playing...")
-                return
-            end
-            if #PathsLoaded == 0 then
-                setAutoStatus("No Path Loaded")
-                return
-            end
-
-            isReplaying = true
-            shouldStop = false
-            setAutoStatus("Playing...")
-
-            for i, jsonData in ipairs(PathsLoaded) do
-                if shouldStop then break end
-
-                setAutoStatus(("Loading Path %d..."):format(i))
-                local okDes = pcall(function()
-                    deserializePlatformData(jsonData)
-                end)
-
-                if okDes then
-                    setAutoStatus(("Replaying Path %d ▶"):format(i))
-                    local okReplay = pcall(function()
-                        ReplayFrom(1)
-                    end)
-                    if not okReplay then
-                        warn("[AutoWalk] Replay error on Path " .. i)
+        -- ▶ PLAY ALL PATHS
+        ---------------------------------------------------------
+        AutoSection:CreateButton("▶ Play", function()
+            task.spawn(function()
+                local okPlay, errPlay = pcall(function()
+                    if replaying then return end
+                    if #PathsLoaded == 0 then
+                        statusLabel:Set("Status: No Path Loaded")
+                        return
                     end
-                else
-                    warn("[AutoWalk] Deserialize error on Path " .. i)
+                    replaying, shouldStopReplay = true, false
+                    statusLabel:Set("Status: Playing...")
+                    for i, jsonData in ipairs(PathsLoaded) do
+                        if shouldStopReplay then break end
+                        statusLabel:Set("Status: Path "..i.." ▶")
+                        local okDecode = pcall(function()
+                            deserializePlatformData(jsonData)
+                        end)
+                        if okDecode and typeof(replayPlatforms) == "function" then
+                            pcall(function() replayPlatforms(1) end)
+                        end
+                        task.wait(0.4)
+                    end
+                    replaying = false
+                    statusLabel:Set(shouldStopReplay and "Status: Stopped ⛔" or "Status: Completed ✅")
+                end)
+                if not okPlay then
+                    warn("[AutoWalk] Play Error:", errPlay)
+                    statusLabel:Set("Status: Play Error ❌")
                 end
-
-                task.wait(0.3)
-            end
-
-            isReplaying = false
-            if shouldStop then
-                setAutoStatus("Stopped ⛔")
-            else
-                setAutoStatus("Completed ✅")
-            end
+            end)
         end)
 
-        if not okPlay then
-            warn("[AutoWalk] Play Error:", errPlay)
-            setAutoStatus("Play Error ❌")
-            isReplaying = false
-        end
+        ---------------------------------------------------------
+        -- ⛔ STOP
+        ---------------------------------------------------------
+        AutoSection:CreateButton("⛔ Stop", function()
+            pcall(function()
+                shouldStopReplay, replaying = true, false
+                if typeof(stopForceMovement) == "function" then
+                    stopForceMovement()
+                end
+                statusLabel:Set("Status: Stopped ⛔")
+            end)
+        end)
     end)
-end)
-
----------------------------------------------------------
--- ⛔ STOP (fix aman)
----------------------------------------------------------
-GLeft:AddButton("⛔ Stop", function()
-    local okStop, errStop = pcall(function()
-        shouldStop = true
-        isReplaying = false
-
-        -- hentikan force movement jika ada
-        if typeof(stopForceMovement) == "function" then
-            stopForceMovement()
-        end
-
-        -- hentikan humanoid agar langsung diam
-        if character and character:FindFirstChild("Humanoid") then
-            local hum = character:FindFirstChild("Humanoid")
-            hum:Move(Vector3.zero)
-        end
-
-        setAutoStatus("Stopped ⛔")
-    end)
-
-    if not okStop then
-        warn("[AutoWalk] Stop error:", errStop)
-        setAutoStatus("Stop Error ❌")
-    end
-end)
-				
-			
 
     if not okInit then
         warn("[AutoWalk Tab Init Error]:", errInit)
