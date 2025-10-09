@@ -778,113 +778,56 @@ task.spawn(function()
                     task.wait(0.3)
                 end
 
-		-----------------------------------------------------
--- ▶ PLAY (FULL + PAUSE / RESUME SUPPORT)
------------------------------------------------------
-local isPaused = false
-local pausedIndex = 1
-local pausedPosition = nil
-
-GLeft:AddButton("▶ Play", function()
-    task.spawn(function()
-        if isReplaying then return end
-        if #PathsLoaded == 0 then
-            setAutoStatus("No Path Loaded")
-            return
-        end
-
-        isReplaying, shouldStop, isPaused = true, false, false
-        setAutoStatus("Playing...")
-
-        for i, jsonData in ipairs(PathsLoaded) do
-            if shouldStop then break end
-
-            setAutoStatus(("Loading Path %d..."):format(i))
-            local okDes = pcall(function()
-                deserializePlatformData(jsonData)
+---------------------------------------------------------
+        -- ▶ PLAY ALL PATHS
+        ---------------------------------------------------------
+        AutoSection:CreateButton("▶ Play", function()
+            task.spawn(function()
+                local okPlay, errPlay = pcall(function()
+                    if replaying then return end
+                    if #PathsLoaded == 0 then
+                        statusLabel:Set("Status: No Path Loaded")
+                        return
+                    end
+                    replaying, shouldStopReplay = true, false
+                    statusLabel:Set("Status: Playing...")
+                    for i, jsonData in ipairs(PathsLoaded) do
+                        if shouldStopReplay then break end
+                        statusLabel:Set("Status: Path "..i.." ▶")
+                        local okDecode = pcall(function()
+                            deserializePlatformData(jsonData)
+                        end)
+                        if okDecode and typeof(replayPlatforms) == "function" then
+                            pcall(function() replayPlatforms(1) end)
+                        end
+                        task.wait(0.4)
+                    end
+                    replaying = false
+                    statusLabel:Set(shouldStopReplay and "Status: Stopped ⛔" or "Status: Completed ✅")
+                end)
+                if not okPlay then
+                    warn("[AutoWalk] Play Error:", errPlay)
+                    statusLabel:Set("Status: Play Error ❌")
+                end
             end)
-            if not okDes then
-                warn("[AutoWalk] Deserialize error Path "..i)
-                continue
-            end
-
-            setAutoStatus(("Replaying Path %d ▶"):format(i))
-
-            -- simpan posisi awal sebelum play path ini
-            local resumeStartIndex = 1
-            if isPaused and pausedIndex > 1 then
-                resumeStartIndex = pausedIndex
-                isPaused = false
-                pausedIndex = 1
-            end
-
-            -- jalankan replay dari index sesuai (resumeStartIndex)
-            local okPlay = pcall(function()
-                ReplayFrom(resumeStartIndex)
-            end)
-            if not okPlay then
-                warn("[AutoWalk] Replay error Path "..i)
-            end
-
-            task.wait(0.3)
-        end
-
-        isReplaying = false
-        if shouldStop or isPaused then
-            setAutoStatus("Paused ⏸")
-        else
-            setAutoStatus("Completed ✅")
-        end
-    end)
-end)
-
------------------------------------------------------
--- ⏸ PAUSE / ▶ RESUME
------------------------------------------------------
-GLeft:AddButton("⏸ Pause / ▶ Resume", function()
-    -- Jika belum play sama sekali
-    if not isReplaying and not isPaused then
-        setAutoStatus("Not playing")
-        return
-    end
-
-    if not isPaused then
-        -------------------------------------------------
-        -- PAUSE
-        -------------------------------------------------
-        isPaused = true
-        shouldStop = true  -- hentikan ReplayFrom loop
-        pausedIndex = math.max(currentPlatformIndex, 1)
-
-        -- simpan posisi terakhir avatar di dunia
-        if character and character.PrimaryPart then
-            pausedPosition = character.PrimaryPart.CFrame
-        end
-
-        stopForceMovement()
-        setAutoStatus(("Paused at Platform %d ⏸"):format(pausedIndex))
-    else
-        -------------------------------------------------
-        -- RESUME
-        -------------------------------------------------
-        isPaused = false
-        shouldStop = false
-        setAutoStatus(("Resuming from Platform %d ▶"):format(pausedIndex))
-
-        -- pastikan karakter tetap di posisi terakhir
-        if pausedPosition and character and character.PrimaryPart then
-            character:SetPrimaryPartCFrame(pausedPosition)
-        end
-
-        task.spawn(function()
-            local ok, err = pcall(function()
-                ReplayFrom(pausedIndex)
-            end)
-            if not ok then
-                warn("[AutoWalk] Resume error:", err)
-                setAutoStatus("Resume Error ❌")
-            end
         end)
+
+        ---------------------------------------------------------
+        -- ⛔ STOP
+        ---------------------------------------------------------
+        AutoSection:CreateButton("⛔ Stop", function()
+            pcall(function()
+                shouldStopReplay, replaying = true, false
+                if typeof(stopForceMovement) == "function" then
+                    stopForceMovement()
+                end
+                statusLabel:Set("Status: Stopped ⛔")
+            end)
+        end)
+    end)
+
+    if not ok then
+        warn("[AutoWalk Tab Error]:", err)
     end
 end)
 
