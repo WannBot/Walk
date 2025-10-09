@@ -690,7 +690,7 @@ local Tabs = {
 -------------------------------------------------------------
 local HttpService = game:GetService("HttpService")
 local player = game.Players.LocalPlayer
-local AntartikaPathsURL = "https://raw.githubusercontent.com/WannBot/WindUI/refs/heads/main/Antartika/antartika_paths.json"
+local AntartikaPathsURL = "https://raw.githubusercontent.com/WannBot/Walk/refs/heads/main/Antartika/antartika_paths.json"
 
 local ok, err = pcall(function()
     Tabs.Auto = Window:AddTab("Auto Walk", "map-pin")
