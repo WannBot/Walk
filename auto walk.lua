@@ -686,12 +686,12 @@ local Tabs = {
 }
 
 ---------------------------------------------------------
--- 🧭 AUTO WALK TAB (Antartika)
+--  AUTO WALK TAB (Antartika)
 ---------------------------------------------------------
 local AutoWalkTab = Window:NewTab("Auto Walk")
 local AutoSection = AutoWalkTab:NewSection("Map Antartika")
 
--- URL Path list
+-- List path GitHub
 local PathList = {
     "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path1.json",
     "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path2.json",
@@ -700,7 +700,7 @@ local PathList = {
     "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path5.json"
 }
 
--- Status
+-- Status label
 local AutoWalkStatus = Instance.new("TextLabel")
 AutoWalkStatus.Size = UDim2.new(1, 0, 0, 30)
 AutoWalkStatus.BackgroundTransparency = 1
@@ -709,84 +709,128 @@ AutoWalkStatus.TextScaled = true
 AutoWalkStatus.Text = "Status: Idle"
 AutoWalkStatus.Parent = AutoSection.Container
 
+-- Variabel utama
 local PathsLoaded = {}
-
----------------------------------------------------------
--- 🔄 Load All JSON (struktur sama dengan "Load JSON/URL")
----------------------------------------------------------
-AutoSection:NewButton("📥 Load All", function()
-	task.spawn(function()
-		PathsLoaded = {}
-		AutoWalkStatus.Text = "Loading Paths..."
-		for i, url in ipairs(PathList) do
-			local success, response = pcall(function()
-				return game:HttpGet(url)
-			end)
-			if success then
-				table.insert(PathsLoaded, response)
-				print("[AutoWalk] Loaded Path "..i)
-			else
-				warn("[AutoWalk] Gagal load path "..i)
-			end
-			task.wait(0.5)
-		end
-		if #PathsLoaded > 0 then
-			AutoWalkStatus.Text = "Loaded "..#PathsLoaded.." Paths ✅"
-		else
-			AutoWalkStatus.Text = "❌ Gagal Load Path!"
-		end
-	end)
-end)
-
----------------------------------------------------------
--- ▶ PLAY (struktur sama seperti "Play Selected")
----------------------------------------------------------
 local replaying = false
 local shouldStopReplay = false
 
-AutoSection:NewButton("▶ Play", function()
-	if replaying or #PathsLoaded == 0 then return end
-	replaying = true
-	shouldStopReplay = false
-	AutoWalkStatus.Text = "Status: Playing..."
-
+---------------------------------------------------------
+-- 📥 LOAD ALL PATHS (pakai struktur "Load JSON/URL")
+---------------------------------------------------------
+AutoSection:NewButton("📥 Load All", function()
 	task.spawn(function()
-		for i, jsonData in ipairs(PathsLoaded) do
-			if shouldStopReplay then break end
+		local ok, err = pcall(function()
+			PathsLoaded = {}
+			AutoWalkStatus.Text = "Status: Loading..."
+			for i, url in ipairs(PathList) do
+				local success, data = pcall(function()
+					return game:HttpGet(url)
+				end)
 
-			local ok, _ = pcall(function()
-				deserializePlatformData(jsonData)
-			end)
+				if success and data and #data > 100 then
+					table.insert(PathsLoaded, data)
+					print("[AutoWalk] Loaded Path "..i)
+				else
+					warn("[AutoWalk] Gagal load Path "..i)
+				end
 
-			if not ok then
-				warn("[AutoWalk] Gagal load Path "..i)
-				continue
+				task.wait(0.2)
 			end
 
-			if typeof(replayPlatforms) == "function" then
-				replayPlatforms(1) -- mainkan dari platform 1
+			if #PathsLoaded > 0 then
+				AutoWalkStatus.Text = "Status: "..#PathsLoaded.." Path Loaded ✅"
 			else
-				warn("replayPlatforms() tidak ditemukan!")
-				break
+				AutoWalkStatus.Text = "Status: Load Failed ❌"
 			end
+		end)
 
-			task.wait(0.5)
+		if not ok then
+			warn("[AutoWalk] LoadAll Error:", err)
+			AutoWalkStatus.Text = "Status: Load Error ❌"
 		end
-		replaying = false
-		AutoWalkStatus.Text = "Status: Completed ✅"
 	end)
 end)
 
 ---------------------------------------------------------
--- ⛔ STOP
+-- ▶ PLAY (pakai struktur "Play Selected")
+---------------------------------------------------------
+AutoSection:NewButton("▶ Play", function()
+	task.spawn(function()
+		local ok, err = pcall(function()
+			if replaying then return end
+			if #PathsLoaded == 0 then
+				AutoWalkStatus.Text = "Status: No Path Loaded"
+				return
+			end
+
+			replaying = true
+			shouldStopReplay = false
+			AutoWalkStatus.Text = "Status: Playing..."
+
+			for i, pathData in ipairs(PathsLoaded) do
+				if shouldStopReplay then break end
+
+				AutoWalkStatus.Text = "Status: Loading Path "..i
+				local loadOK = pcall(function()
+					deserializePlatformData(pathData)
+				end)
+
+				if not loadOK then
+					warn("[AutoWalk] Gagal Deserialize Path "..i)
+					continue
+				end
+
+				task.wait(0.3)
+				AutoWalkStatus.Text = "Status: Replaying Path "..i
+
+				if typeof(replayPlatforms) == "function" then
+					local successReplay = pcall(function()
+						replayPlatforms(1)
+					end)
+					if not successReplay then
+						warn("[AutoWalk] Replay gagal pada Path "..i)
+					end
+				else
+					warn("replayPlatforms() tidak ditemukan!")
+					break
+				end
+
+				task.wait(0.5)
+			end
+
+			replaying = false
+			if shouldStopReplay then
+				AutoWalkStatus.Text = "Status: Stopped ⛔"
+			else
+				AutoWalkStatus.Text = "Status: Completed ✅"
+			end
+		end)
+
+		if not ok then
+			warn("[AutoWalk] Play Error:", err)
+			AutoWalkStatus.Text = "Status: Play Error ❌"
+			replaying = false
+		end
+	end)
+end)
+
+---------------------------------------------------------
+-- ⛔ STOP (pakai struktur "Stop Replay")
 ---------------------------------------------------------
 AutoSection:NewButton("⛔ Stop", function()
-	shouldStopReplay = true
-	replaying = false
-	if typeof(stopForceMovement) == "function" then
-		stopForceMovement()
+	local ok, err = pcall(function()
+		shouldStopReplay = true
+		replaying = false
+		if typeof(stopForceMovement) == "function" then
+			stopForceMovement()
+		end
+		AutoWalkStatus.Text = "Status: Stopped ⛔"
+	end)
+
+	if not ok then
+		warn("[AutoWalk] Stop Error:", err)
+		AutoWalkStatus.Text = "Status: Stop Error ❌"
 	end
-	AutoWalkStatus.Text = "Status: Stopped"
 end)
  
 -- 🔧 Status Label global (pojok bawah)
