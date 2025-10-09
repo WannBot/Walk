@@ -701,35 +701,83 @@ local AntartikaPaths = {
 }
 
 -------------------------------------------------------------
--- 🔘 Tambahkan ke tab UI
+-- 🌍 TAB AUTO WALK (pakai Catbox + JSON list dari GitHub)
 -------------------------------------------------------------
+local HttpService = game:GetService("HttpService")
+local player = game.Players.LocalPlayer
+
+-- URL JSON yang berisi daftar semua path Catbox
+local AntartikaPathsURL = "https://raw.githubusercontent.com/WannBot/Walk/refs/heads/main/Antartika/antartika_paths.json"
+
+-- Variabel penyimpanan sementara
+local LoadedPaths = {}
+local PathsLoaded = false
+
+-- Tambah Tab dan Groupbox
 Tabs.Auto = Window:AddTab("Auto Walk", "map-pin")
 local AutoGB = Tabs.Auto:AddLeftGroupbox("MAP ANTARTIKA")
 AutoGB:AddLabel("AUTO WALK CONTROL")
 
 -------------------------------------------------------------
--- ▶ Tombol Play All
+-- 📥 Tombol Load All Path
+-------------------------------------------------------------
+AutoGB:AddButton("📥 Load All Path", function()
+    task.spawn(function()
+        statusLabel:Set("Status: Loading All Paths...")
+        local ok, data = pcall(function()
+            return game:HttpGet(AntartikaPathsURL)
+        end)
+
+        if not ok or not data then
+            statusLabel:Set("Status: ❌ Gagal ambil daftar path")
+            warn("[AutoWalk] Gagal ambil daftar path dari:", AntartikaPathsURL)
+            return
+        end
+
+        local success, decoded = pcall(function()
+            return HttpService:JSONDecode(data)
+        end)
+
+        if not success or not decoded.paths then
+            statusLabel:Set("Status: ❌ Format JSON tidak valid")
+            warn("[AutoWalk] JSON paths invalid")
+            return
+        end
+
+        LoadedPaths = decoded.paths
+        PathsLoaded = true
+        statusLabel:Set("Status: ✅ Loaded " .. #LoadedPaths .. " Path(s)")
+        print("[AutoWalk] Loaded total path:", #LoadedPaths)
+    end)
+end)
+
+-------------------------------------------------------------
+-- ▶ Tombol Play All Path
 -------------------------------------------------------------
 AutoGB:AddButton("▶ Play All Path", function()
     task.spawn(function()
-        statusLabel:Set("Status: Loading...")
+        if not PathsLoaded or #LoadedPaths == 0 then
+            statusLabel:Set("Status: ⚠️ Belum Load Path!")
+            warn("[AutoWalk] Belum load path!")
+            return
+        end
+
         shouldStopReplay = false
         replaying = true
+        statusLabel:Set("Status: Playing...")
 
-        -- loop semua link path
-        for i, pathUrl in ipairs(AntartikaPaths) do
+        for i, pathUrl in ipairs(LoadedPaths) do
             if shouldStopReplay then break end
-
             statusLabel:Set("Status: Loading Path " .. i)
+
             local ok, pathData = pcall(function()
                 return game:HttpGet(pathUrl)
             end)
 
             if ok and pathData then
-                statusLabel:Set("Status: Playing Path " .. i)
                 deserializePlatformData(pathData)
+                statusLabel:Set("Status: Playing Path " .. i)
 
-                -- mulai jalanin tiap platform dari file path
                 for _, platform in ipairs(platforms) do
                     if shouldStopReplay then break end
                     local char = player.Character or player.CharacterAdded:Wait()
@@ -743,7 +791,7 @@ AutoGB:AddButton("▶ Play All Path", function()
                 statusLabel:Set("Status: Completed Path " .. i)
                 task.wait(0.5)
             else
-                warn("[AutoWalk] ❌ Gagal ambil path:", pathUrl)
+                warn("[AutoWalk] Gagal ambil:", pathUrl)
             end
         end
 
@@ -759,7 +807,7 @@ AutoGB:AddButton("⛔ Stop Auto Walk", function()
     shouldStopReplay = true
     replaying = false
     statusLabel:Set("Status: Stopped")
-    print("[AutoWalk] Dihentikan oleh pengguna.")
+    print("[AutoWalk] Dihentikan manual")
 end)
 
 -- 🔧 Status Label global (pojok bawah)
