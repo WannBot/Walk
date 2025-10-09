@@ -685,161 +685,109 @@ local Tabs = {
 	Theme = Window:AddTab("Setting", "settings"),
 }
 
--------------------------------------------------------------
--- 🌍 TAB AUTO WALK (GitHub RAW file, super-safe)
--------------------------------------------------------------
-do
-    local ok, err = pcall(function()
-        -- Pakai icon "map" biar pasti ada
-        Tabs.Auto = Window:AddTab("Auto Walk", "map")
-        local AutoGB = Tabs.Auto:AddLeftGroupbox("MAP ANTARTIKA")
-        AutoGB:AddLabel("AUTO WALK CONTROL")
-
-        -- RAW GitHub yang benar (TANPA 'refs/heads')
-        local PATH_URLS = {
-            "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path1.json",
-            -- tambah lagi kalau ada:
-            -- "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path2.json",
-            -- "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path3.json",
-        }
-
-        -- Helper status aman (tidak bikin crash kalau label belum ada)
-        local function setStatus(txt)
-            if statusLabel and statusLabel.Set then
-                statusLabel:Set("Status: " .. txt)
-            else
-                print("[Status] " .. txt)
-            end
-        end
-
-        -- Guard untuk fungsi & data dari script utama
-        local function envReady()
-            if type(deserializePlatformData) ~= "function" then
-                setStatus("deserializePlatformData belum ada")
-                warn("[AutoWalk] deserializePlatformData() belum terdefinisi di script utama.")
-                return false
-            end
-            if type(platforms) ~= "table" then
-                setStatus("platforms belum siap")
-                warn("[AutoWalk] 'platforms' belum tersedia di script utama.")
-                return false
-            end
-            return true
-        end
-
-        -- Cache daftar URL yg sudah diload (opsional)
-        local LoadedList = {}
-        local PathsLoaded = false
-
-        ---------------------------------------------------------
-        -- 📥 Load All Path (ambil semua file tapi belum jalan)
-        ---------------------------------------------------------
-        AutoGB:AddButton("📥 Load All Path", function()
-            task.spawn(function()
-                setStatus("Loading All Paths...")
-                LoadedList = {}
-
-                for i, url in ipairs(PATH_URLS) do
-                    local okFetch, body = pcall(function()
-                        return game:HttpGet(url)
-                    end)
-                    if okFetch and body and #body > 0 then
-                        -- Deteksi jika salah URL (HTML dari GitHub)
-                        if body:find("<!DOCTYPE html>") or body:find("<html") then
-                            warn("[AutoWalk] Sepertinya URL salah/404 (HTML terdeteksi): " .. url)
-                            setStatus(("URL salah/404 (Path %d)"):format(i))
-                            return
-                        end
-                        LoadedList[i] = body
-                        print(("[AutoWalk] Loaded Path %d OK (%d bytes)"):format(i, #body))
-                        task.wait(0.1)
-                    else
-                        warn("[AutoWalk] Gagal ambil: " .. url)
-                        setStatus(("Gagal ambil Path %d"):format(i))
-                        return
-                    end
-                end
-
-                PathsLoaded = (#LoadedList == #PATH_URLS)
-                if PathsLoaded then
-                    setStatus(("Loaded %d path"):format(#LoadedList))
-                else
-                    setStatus("Sebagian path gagal")
-                end
-            end)
-        end)
-
-        ---------------------------------------------------------
-        -- ▶ Play All Path
-        ---------------------------------------------------------
-        ---------------------------------------------------------
--- ▶ Play All Path (pakai replayPlatforms() asli)
 ---------------------------------------------------------
-AutoGB:AddButton("▶ Play All Path", function()
-    task.spawn(function()
-        if not envReady() then return end
-        if not PathsLoaded or #LoadedList == 0 then
-            setStatus("Belum Load Path!")
-            return
-        end
+-- 🧭 AUTO WALK TAB (Antartika)
+---------------------------------------------------------
+local AutoWalkTab = Window:NewTab("Auto Walk")
+local AutoSection = AutoWalkTab:NewSection("Map Antartika")
 
-        shouldStopReplay = false
-        replaying = true
-        setStatus("Playing...")
+-- URL Path list
+local PathList = {
+    "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path1.json",
+    "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path2.json",
+    "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path3.json",
+    "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path4.json",
+    "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path5.json"
+}
 
-        for i = 1, #LoadedList do
-            if shouldStopReplay then break end
-            local data = LoadedList[i]
-            if not data or #data == 0 then
-                setStatus(("Data kosong (Path %d)"):format(i))
-                break
-            end
+-- Status
+local AutoWalkStatus = Instance.new("TextLabel")
+AutoWalkStatus.Size = UDim2.new(1, 0, 0, 30)
+AutoWalkStatus.BackgroundTransparency = 1
+AutoWalkStatus.TextColor3 = Color3.fromRGB(255,255,255)
+AutoWalkStatus.TextScaled = true
+AutoWalkStatus.Text = "Status: Idle"
+AutoWalkStatus.Parent = AutoSection.Container
 
-            setStatus(("Loading Path %d"):format(i))
-            local ok, err = pcall(function()
-                deserializePlatformData(data)
-            end)
-            if not ok then
-                warn("[AutoWalk] Deserialize gagal:", err)
-                setStatus("Deserialize gagal")
-                break
-            end
+local PathsLoaded = {}
 
-            -- 🔹 Gunakan fungsi replay asli
-            if typeof(replayPlatforms) == "function" then
-                replayPlatforms(1) -- mulai dari platform pertama
-            else
-                warn("[AutoWalk] replayPlatforms() tidak ditemukan")
-                setStatus("replayPlatforms() tidak ada di script utama")
-                break
-            end
-
-            if shouldStopReplay then break end
-            setStatus(("Completed Path %d"):format(i))
-            task.wait(0.3)
-        end
-
-        replaying = false
-        if not shouldStopReplay then
-            setStatus("Completed ✅")
-        end
-    end)
+---------------------------------------------------------
+-- 🔄 Load All JSON (struktur sama dengan "Load JSON/URL")
+---------------------------------------------------------
+AutoSection:NewButton("📥 Load All", function()
+	task.spawn(function()
+		PathsLoaded = {}
+		AutoWalkStatus.Text = "Loading Paths..."
+		for i, url in ipairs(PathList) do
+			local success, response = pcall(function()
+				return game:HttpGet(url)
+			end)
+			if success then
+				table.insert(PathsLoaded, response)
+				print("[AutoWalk] Loaded Path "..i)
+			else
+				warn("[AutoWalk] Gagal load path "..i)
+			end
+			task.wait(0.5)
+		end
+		if #PathsLoaded > 0 then
+			AutoWalkStatus.Text = "Loaded "..#PathsLoaded.." Paths ✅"
+		else
+			AutoWalkStatus.Text = "❌ Gagal Load Path!"
+		end
+	end)
 end)
 
-        ---------------------------------------------------------
-        -- ⛔ Stop
-        ---------------------------------------------------------
-        AutoGB:AddButton("⛔ Stop", function()
-            shouldStopReplay = true
-            replaying = false
-            setStatus("Stopped")
-        end)
-    end)
+---------------------------------------------------------
+-- ▶ PLAY (struktur sama seperti "Play Selected")
+---------------------------------------------------------
+local replaying = false
+local shouldStopReplay = false
 
-    if not ok then
-        warn("[AutoWalk] Init error: ", err)
-    end
-end
+AutoSection:NewButton("▶ Play", function()
+	if replaying or #PathsLoaded == 0 then return end
+	replaying = true
+	shouldStopReplay = false
+	AutoWalkStatus.Text = "Status: Playing..."
+
+	task.spawn(function()
+		for i, jsonData in ipairs(PathsLoaded) do
+			if shouldStopReplay then break end
+
+			local ok, _ = pcall(function()
+				deserializePlatformData(jsonData)
+			end)
+
+			if not ok then
+				warn("[AutoWalk] Gagal load Path "..i)
+				continue
+			end
+
+			if typeof(replayPlatforms) == "function" then
+				replayPlatforms(1) -- mainkan dari platform 1
+			else
+				warn("replayPlatforms() tidak ditemukan!")
+				break
+			end
+
+			task.wait(0.5)
+		end
+		replaying = false
+		AutoWalkStatus.Text = "Status: Completed ✅"
+	end)
+end)
+
+---------------------------------------------------------
+-- ⛔ STOP
+---------------------------------------------------------
+AutoSection:NewButton("⛔ Stop", function()
+	shouldStopReplay = true
+	replaying = false
+	if typeof(stopForceMovement) == "function" then
+		stopForceMovement()
+	end
+	AutoWalkStatus.Text = "Status: Stopped"
+end)
  
 -- 🔧 Status Label global (pojok bawah)
 local StatusBox = Tabs.Main:AddRightGroupbox("Status")
