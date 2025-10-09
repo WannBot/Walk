@@ -686,21 +686,24 @@ local Tabs = {
 }
 
 ---------------------------------------------------------
--- 🧭 AUTO WALK TAB (Antartika)
+-- 🧭 AUTO WALK TAB (Antartika) — Versi Window:AddTab()
 ---------------------------------------------------------
 
--- pastikan UI sudah siap dulu
 task.spawn(function()
-	repeat task.wait(0.5) until Window ~= nil and typeof(Window.NewTab) == "function"
+	-- tunggu Obsidian siap
+	while (Window == nil or typeof(Window.AddTab) ~= "function") do
+		warn("[AutoWalk] Waiting for Obsidian UI (AddTab) to load...")
+		task.wait(1)
+	end
+
+	print("[AutoWalk] Obsidian UI ready, creating Auto Walk tab...")
 
 	local ok, err = pcall(function()
-		local AutoWalkTab = Window:NewTab("Auto Walk")
-		local AutoSection = AutoWalkTab:NewSection("Map Antartika")
+		local AutoWalkTab = Window:AddTab("Auto Walk")
+		local AutoSection = AutoWalkTab:AddSection("Map Antartika")
 
-		-- gunakan AddLabel Obsidian
 		local statusLabel = AutoSection:AddLabel("Status: Idle")
 
-		-- daftar URL path
 		local PathList = {
 			"https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path1.json",
 			"https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path2.json",
@@ -731,7 +734,7 @@ task.spawn(function()
 							table.insert(PathsLoaded, data)
 							print("[AutoWalk] Loaded Path "..i)
 						else
-							warn("[AutoWalk] Gagal load Path "..i)
+							warn("[AutoWalk] Failed to load Path "..i)
 						end
 						task.wait(0.3)
 					end
@@ -768,8 +771,8 @@ task.spawn(function()
 
 					for i, jsonData in ipairs(PathsLoaded) do
 						if shouldStopReplay then break end
-						statusLabel:Set("Status: Path "..i.." ▶")
 
+						statusLabel:Set("Status: Path "..i.." ▶")
 						local okDecode = pcall(function()
 							deserializePlatformData(jsonData)
 						end)
@@ -779,10 +782,10 @@ task.spawn(function()
 								replayPlatforms(1)
 							end)
 							if not okReplay then
-								warn("[AutoWalk] Gagal replay Path "..i)
+								warn("[AutoWalk] Replay failed Path "..i)
 							end
 						else
-							warn("[AutoWalk] Gagal deserialize Path "..i)
+							warn("[AutoWalk] Deserialize failed Path "..i)
 						end
 
 						task.wait(0.4)
@@ -825,6 +828,8 @@ task.spawn(function()
 
 	if not ok then
 		warn("[AutoWalk Tab Error]:", err)
+	else
+		print("[AutoWalk] Tab successfully created ✅")
 	end
 end)
  
