@@ -692,7 +692,7 @@ local HttpService = game:GetService("HttpService")
 local player = game.Players.LocalPlayer
 
 -- URL JSON yang berisi daftar semua path Catbox
-local AntartikaPathsURL = "https://raw.githubusercontent.com/WannBot/Walk/refs/heads/main/Antartika/antartika_paths.json"
+local AntartikaPathsURL = "local AntartikaPathsURL = "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/antartika_paths.json""
 
 -- Variabel penyimpanan sementara
 local LoadedPaths = {}
