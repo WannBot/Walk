@@ -742,59 +742,66 @@ task.spawn(function()
             end)
         end)
 
-				---------------------------------------------------------
-        -- ▶ PLAY ALL PATHS
-        ---------------------------------------------------------
-        AutoSection:CreateButton("▶ Play", function()
+		-----------------------------------------------------
+        -- ▶ PLAY ALL PATHS (gunakan ReplayFrom)
+        -----------------------------------------------------
+        GLeft:AddButton("▶ Play", function()
             task.spawn(function()
-                local okPlay, errPlay = pcall(function()
-                    if replaying then return end
-                    if #PathsLoaded == 0 then
-                        statusLabel:Set("Status: No Path Loaded")
-                        return
-                    end
-                    replaying, shouldStopReplay = true, false
-                    statusLabel:Set("Status: Playing...")
-                    for i, jsonData in ipairs(PathsLoaded) do
-                        if shouldStopReplay then break end
-                        statusLabel:Set("Status: Path "..i.." ▶")
-                        local okDecode = pcall(function()
-                            deserializePlatformData(jsonData)
+                if isReplaying then return end
+                if #PathsLoaded == 0 then
+                    setAutoStatus("No Path Loaded")
+                    return
+                end
+
+                isReplaying, shouldStop = true, false
+                setAutoStatus("Playing...")
+
+                for i, jsonData in ipairs(PathsLoaded) do
+                    if shouldStop then break end
+
+                    setAutoStatus(("Loading Path %d..."):format(i))
+                    local okDes = pcall(function()
+                        deserializePlatformData(jsonData)
+                    end)
+
+                    if okDes then
+                        setAutoStatus(("Replaying Path %d ▶"):format(i))
+                        local okPlay = pcall(function()
+                            ReplayFrom(1)
                         end)
-                        if okDecode and typeof(replayPlatforms) == "function" then
-                            pcall(function() replayPlatforms(1) end)
+                        if not okPlay then
+                            warn("[AutoWalk] Replay error on Path "..i)
                         end
-                        task.wait(0.4)
+                    else
+                        warn("[AutoWalk] Deserialize error Path "..i)
                     end
-                    replaying = false
-                    statusLabel:Set(shouldStopReplay and "Status: Stopped ⛔" or "Status: Completed ✅")
-                end)
-                if not okPlay then
-                    warn("[AutoWalk] Play Error:", errPlay)
-                    statusLabel:Set("Status: Play Error ❌")
+                    task.wait(0.3)
+                end
+
+                isReplaying = false
+                if shouldStop then
+                    setAutoStatus("Stopped ⛔")
+                else
+                    setAutoStatus("Completed ✅")
                 end
             end)
         end)
 
-        ---------------------------------------------------------
+        -----------------------------------------------------
         -- ⛔ STOP
-        ---------------------------------------------------------
-        AutoSection:CreateButton("⛔ Stop", function()
-            pcall(function()
-                shouldStopReplay, replaying = true, false
-                if typeof(stopForceMovement) == "function" then
-                    stopForceMovement()
-                end
-                statusLabel:Set("Status: Stopped ⛔")
-            end)
+        -----------------------------------------------------
+        GLeft:AddButton("⛔ Stop", function()
+            shouldStop = true
+            isReplaying = false
+            pcall(stopForceMovement)
+            setAutoStatus("Stopped ⛔")
         end)
     end)
-
+	
     if not okInit then
         warn("[AutoWalk Tab Init Error]:", errInit)
     end
 end)
-
 
 
 -- 🔧 Status Label global (pojok bawah)
