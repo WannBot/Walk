@@ -742,60 +742,78 @@ task.spawn(function()
             end)
         end)
 
+				---------------------------------------------------------
+-- ▶ PLAY ALL PATHS (fix)
 ---------------------------------------------------------
-        -- ▶ PLAY ALL PATHS
-        ---------------------------------------------------------
-        AutoSection:CreateButton("▶ Play", function()
-            task.spawn(function()
-                local okPlay, errPlay = pcall(function()
-                    if replaying then return end
-                    if #PathsLoaded == 0 then
-                        statusLabel:Set("Status: No Path Loaded")
-                        return
-                    end
-                    replaying, shouldStopReplay = true, false
-                    statusLabel:Set("Status: Playing...")
-                    for i, jsonData in ipairs(PathsLoaded) do
-                        if shouldStopReplay then break end
-                        statusLabel:Set("Status: Path "..i.." ▶")
-                        local okDecode = pcall(function()
-                            deserializePlatformData(jsonData)
-                        end)
-                        if okDecode and typeof(replayPlatforms) == "function" then
-                            pcall(function() replayPlatforms(1) end)
-                        end
-                        task.wait(0.4)
-                    end
-                    replaying = false
-                    statusLabel:Set(shouldStopReplay and "Status: Stopped ⛔" or "Status: Completed ✅")
-                end)
-                if not okPlay then
-                    warn("[AutoWalk] Play Error:", errPlay)
-                    statusLabel:Set("Status: Play Error ❌")
-                end
-            end)
-        end)
-
-        ---------------------------------------------------------
-        -- ⛔ STOP
-        ---------------------------------------------------------
-        AutoSection:CreateButton("⛔ Stop", function()
-            pcall(function()
-                shouldStopReplay, replaying = true, false
-                if typeof(stopForceMovement) == "function" then
-                    stopForceMovement()
-                end
-                statusLabel:Set("Status: Stopped ⛔")
-            end)
-        end)
-    end)
-
-    if not ok then
-        warn("[AutoWalk Tab Error]:", err)
+AutoSection:CreateButton("▶ Play", function()
+    if replaying then
+        statusLabel:Set("Status: Already playing...")
+        return
     end
+    if #PathsLoaded == 0 then
+        statusLabel:Set("Status: No Path Loaded")
+        return
+    end
+
+    task.spawn(function()
+        local okPlay, errPlay = pcall(function()
+            replaying, shouldStopReplay = true, false
+            statusLabel:Set("Status: Playing...")
+
+            for i, jsonData in ipairs(PathsLoaded) do
+                if shouldStopReplay then break end
+
+                statusLabel:Set("Status: Path "..i.." ▶")
+                local okDecode = pcall(function()
+                    deserializePlatformData(jsonData)
+                end)
+
+                if okDecode then
+                    -- Gunakan fungsi utama replay lama
+                    pcall(function()
+                        ReplayFrom(1)
+                    end)
+                else
+                    warn("[AutoWalk] Failed to decode path "..i)
+                end
+
+                task.wait(0.2)
+            end
+
+            replaying = false
+            statusLabel:Set(shouldStopReplay and "Status: Stopped ⛔" or "Status: Completed ✅")
+        end)
+
+        if not okPlay then
+            warn("[AutoWalk] Play Error:", errPlay)
+            statusLabel:Set("Status: Play Error ❌")
+            replaying = false
+        end
+    end)
 end)
 
- 
+---------------------------------------------------------
+-- ⛔ STOP (now works with ReplayFrom)
+---------------------------------------------------------
+AutoSection:CreateButton("⛔ Stop", function()
+    pcall(function()
+        shouldStopReplay = true
+        replaying = false
+
+        if typeof(stopForceMovement) == "function" then
+            stopForceMovement()
+        end
+
+        -- jika karakter sedang jalan, hentikan total
+        if character and character:FindFirstChild("Humanoid") then
+            local hum = character:FindFirstChild("Humanoid")
+            hum:Move(Vector3.zero)
+        end
+
+        statusLabel:Set("Status: Stopped ⛔")
+    end)
+end)
+
 -- 🔧 Status Label global (pojok bawah)
 local StatusBox = Tabs.Main:AddRightGroupbox("Status")
 local statusLabel = StatusBox:AddLabel("Status: Idle")
