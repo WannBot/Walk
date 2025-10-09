@@ -685,80 +685,97 @@ local Tabs = {
 	Theme = Window:AddTab("Setting", "settings"),
 }
 
--- 🌍 Tab Auto Walk (versi groupbox aman)
+-------------------------------------------------------------
+-- 🌍 TAB AUTO WALK (AMAN UNTUK OBSIDIAN UI)
+-------------------------------------------------------------
+local HttpService = game:GetService("HttpService")
+local player = game.Players.LocalPlayer
+local AntartikaPathsURL = "https://raw.githubusercontent.com/WannBot/WindUI/refs/heads/main/Antartika/antartika_paths.json"
+
 local ok, err = pcall(function()
     Tabs.Auto = Window:AddTab("Auto Walk", "map-pin")
 
-    local HttpService = game:GetService("HttpService")
-    local player = game.Players.LocalPlayer
-    local AntartikaPathsURL = "https://raw.githubusercontent.com/WannBot/Walk/refs/heads/main/Antartika/antartika_paths.json"
+    -- grupbox di tab Auto Walk
+    local AutoGB = Tabs.Auto:AddLeftGroupbox("MAP ANTARTIKA")
+    AutoGB:AddLabel("AUTO WALK CONTROL")
 
-    -- buat grupbox di dalam tab
-    local AutoGB = Tabs.Auto:AddLeftGroupbox("Map Antartika")
-
-    AutoGB:AddLabel("MAP ANTARTIKA CONTROL")
-
+    ---------------------------------------------------------
+    -- ▶ PLAY ALL BUTTON
+    ---------------------------------------------------------
     AutoGB:AddButton("▶ Play All Path", function()
-    pcall(function()
-        statusLabel:Set("Status: Playing")
+        task.spawn(function()
+            statusLabel:Set("Status: Loading Paths...")
 
-        -- 1️⃣ Ambil daftar path dari file utama
-        local success, data = pcall(function()
-            return game:HttpGet(AntartikaPathsURL)
-        end)
-
-        if not success then
-            statusLabel:Set("Status: Gagal ambil daftar path ❌")
-            warn("[AutoWalk] Gagal ambil daftar path:", data)
-            return
-        end
-
-        -- 2️⃣ Decode JSON-nya
-        local ok, decoded = pcall(function()
-            return HttpService:JSONDecode(data)
-        end)
-
-        if not ok or not decoded.paths then
-            statusLabel:Set("Status: Format JSON salah ❌")
-            warn("[AutoWalk] Format JSON salah")
-            return
-        end
-
-        -- 3️⃣ Loop semua path di file itu
-        for i, pathUrl in ipairs(decoded.paths) do
-            statusLabel:Set("Status: Loading Path " .. i)
-            local okPath, pathData = pcall(function()
-                return game:HttpGet(pathUrl)
+            -- Ambil daftar path dari 1 file JSON utama
+            local success, data = pcall(function()
+                return game:HttpGet(AntartikaPathsURL)
             end)
-            if okPath then
-                deserializePlatformData(pathData)
-                statusLabel:Set("Status: Playing Path " .. i)
-                replaying = true
-                shouldStopReplay = false
+            if not success then
+                warn("[AutoWalk] Gagal ambil daftar path:", data)
+                statusLabel:Set("Status: Gagal ambil daftar path ❌")
+                return
+            end
 
-                task.spawn(function()
-                    for _, platform in ipairs(platforms) do
-                        if shouldStopReplay then break end
-                        local char = player.Character or player.CharacterAdded:Wait()
-                        local hum = char:FindFirstChildOfClass("Humanoid")
-                        if hum then
-                            hum:MoveTo(platform.Position + Vector3.new(0,3,0))
-                            hum.MoveToFinished:Wait()
-                        end
-                    end
-                    replaying = false
+            local ok, decoded = pcall(function()
+                return HttpService:JSONDecode(data)
+            end)
+            if not ok or not decoded or not decoded.paths then
+                warn("[AutoWalk] Format JSON salah")
+                statusLabel:Set("Status: JSON tidak valid ❌")
+                return
+            end
+
+            statusLabel:Set("Status: Playing...")
+            for i, pathUrl in ipairs(decoded.paths) do
+                if shouldStopReplay then break end
+                warn("[AutoWalk] Memuat path:", pathUrl)
+
+                local ok2, pathData = pcall(function()
+                    return game:HttpGet(pathUrl)
                 end)
 
-                repeat task.wait() until not replaying or shouldStopReplay
-            else
-                warn("[AutoWalk] ❌ Gagal ambil path:", pathUrl)
-            end
-            if shouldStopReplay then break end
-        end
+                if ok2 and pathData then
+                    deserializePlatformData(pathData)
+                    statusLabel:Set("Status: Playing Path " .. i)
 
-        statusLabel:Set("Status: Completed ✅")
+                    replaying = true
+                    shouldStopReplay = false
+                    task.spawn(function()
+                        for _, platform in ipairs(platforms) do
+                            if shouldStopReplay then break end
+                            local char = player.Character or player.CharacterAdded:Wait()
+                            local hum = char and char:FindFirstChildOfClass("Humanoid")
+                            if hum then
+                                hum:MoveTo(platform.Position + Vector3.new(0,3,0))
+                                hum.MoveToFinished:Wait()
+                            end
+                        end
+                        replaying = false
+                    end)
+                    repeat task.wait() until not replaying or shouldStopReplay
+                else
+                    warn("[AutoWalk] ❌ Gagal ambil path:", pathUrl)
+                end
+            end
+
+            statusLabel:Set("Status: Completed ✅")
+        end)
+    end)
+
+    ---------------------------------------------------------
+    -- ⛔ STOP BUTTON
+    ---------------------------------------------------------
+    AutoGB:AddButton("⛔ Stop Auto Walk", function()
+        shouldStopReplay = true
+        replaying = false
+        statusLabel:Set("Status: Stopped")
+        print("[AutoWalk] Dihentikan oleh pengguna.")
     end)
 end)
+
+if not ok then
+    warn("[AutoWalk] init error:", err)
+end
 
 -- 🔧 Status Label global (pojok bawah)
 local StatusBox = Tabs.Main:AddRightGroupbox("Status")
