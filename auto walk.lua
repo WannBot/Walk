@@ -741,22 +741,24 @@ task.spawn(function()
                 end
             end)
         end)
+
 				---------------------------------------------------------
--- ▶ PLAY ALL PATHS (fix menggunakan ReplayFrom)
+-- ▶ PLAY ALL PATHS (fix aman)
 ---------------------------------------------------------
 GLeft:AddButton("▶ Play", function()
-    if isReplaying then
-        setAutoStatus("Already playing...")
-        return
-    end
-    if #PathsLoaded == 0 then
-        setAutoStatus("No Path Loaded")
-        return
-    end
-
     task.spawn(function()
         local okPlay, errPlay = pcall(function()
-            isReplaying, shouldStop = true, false
+            if isReplaying then
+                setAutoStatus("Already playing...")
+                return
+            end
+            if #PathsLoaded == 0 then
+                setAutoStatus("No Path Loaded")
+                return
+            end
+
+            isReplaying = true
+            shouldStop = false
             setAutoStatus("Playing...")
 
             for i, jsonData in ipairs(PathsLoaded) do
@@ -799,19 +801,19 @@ GLeft:AddButton("▶ Play", function()
 end)
 
 ---------------------------------------------------------
--- ⛔ STOP (fix full)
+-- ⛔ STOP (fix aman)
 ---------------------------------------------------------
 GLeft:AddButton("⛔ Stop", function()
-    pcall(function()
+    local okStop, errStop = pcall(function()
         shouldStop = true
         isReplaying = false
 
-        -- Hentikan gaya gerak paksa
+        -- hentikan force movement jika ada
         if typeof(stopForceMovement) == "function" then
             stopForceMovement()
         end
 
-        -- Hentikan humanoid (biar langsung diam)
+        -- hentikan humanoid agar langsung diam
         if character and character:FindFirstChild("Humanoid") then
             local hum = character:FindFirstChild("Humanoid")
             hum:Move(Vector3.zero)
@@ -819,7 +821,14 @@ GLeft:AddButton("⛔ Stop", function()
 
         setAutoStatus("Stopped ⛔")
     end)
+
+    if not okStop then
+        warn("[AutoWalk] Stop error:", errStop)
+        setAutoStatus("Stop Error ❌")
+    end
 end)
+				
+			
 
     if not okInit then
         warn("[AutoWalk Tab Init Error]:", errInit)
