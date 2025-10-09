@@ -686,21 +686,6 @@ local Tabs = {
 }
 
 -------------------------------------------------------------
--- 🌍 TAB AUTO WALK (Catbox langsung, tanpa file luar)
--------------------------------------------------------------
-local HttpService = game:GetService("HttpService")
-local player = game.Players.LocalPlayer
-
--- Semua link path catbox disatukan di sini
-local AntartikaPaths = {
-    "https://files.catbox.moe/x2oq45.json",
-    "https://files.catbox.moe/jfjr7x.json",
-    "https://files.catbox.moe/9p6vkp.json",
-    "https://files.catbox.moe/0r4vr2.json",
-    "https://files.catbox.moe/rau8w7.json"
-}
-
--------------------------------------------------------------
 -- 🌍 TAB AUTO WALK (pakai Catbox + JSON list dari GitHub)
 -------------------------------------------------------------
 local HttpService = game:GetService("HttpService")
