@@ -1,13 +1,6 @@
 --[[ 
 WS • Auto Walk (Obsidian UI)
-- UI: Obsidian (Library + ThemeManager + SaveManager)
-- 3 Tabs: Main Control, Data, Platform List
-- Status label real-time (tanpa "WS" prefix)
-- Seluruh logika (record, replay, save, load, pathfinding, force move, chunking) disalin dari script lama dan TIDAK DIUBAH secara fungsional.
-
-Catatan:
-- Tidak membuat ScreenGui/Instance.new UI lama lagi.
-- Semua tombol/event di-wire ke fungsi yang setara dengan versi lama.
+Versi Final (Pause/Resume + Smart Play)
 ]]
 
 ----------------------------------------------------------
@@ -25,84 +18,56 @@ local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local PathfindingService = game:GetService("PathfindingService")
 local HttpService = game:GetService("HttpService")
-
 local player = Players.LocalPlayer or Players.PlayerAdded:Wait()
 player:WaitForChild("PlayerGui")
 
 ----------------------------------------------------------
--- STATE & DATA (disalin dari script lama)
+-- STATE
 ----------------------------------------------------------
-local recording = false
-local replaying = false
+local recording, replaying = false, false
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
 local lastPosition = nil
-
-local platforms = {}           -- Red platforms (Part)
-local yellowPlatforms = {}     -- Yellow platforms (Part)
-local platformData = {}        -- [platform] = { {position=Vector3, orientation=Vector3, isJumping=bool}, ...}
-local yellowToRedMapping = {}  -- [yellowPart] = redPart
-local platformCounter = 0
-
--- Replay control
-local currentReplayThread = nil
-local shouldStopReplay = false
-local currentPlatformIndex = 0
-local totalPlatformsToPlay = 0
-
--- Force movement
-local forceActiveConnection = nil
-local forceSpeedMultiplier = 1.0
 local isClimbing = false
+local forceActiveConnection = nil
 local allConnections = {}
 
--- Chunk save
-local saveChunks = {}
-local currentChunkIndex = 0
-local totalChunks = 0
-local CHUNK_SIZE = 20
+local platforms, yellowPlatforms, platformData, yellowToRedMapping = {}, {}, {}, {}
+local platformCounter = 0
+local currentReplayThread, shouldStopReplay = nil, false
+local currentPlatformIndex, totalPlatformsToPlay = 0, 0
+local forceSpeedMultiplier = 1.0
+
+-- Pause / Resume State
+local shouldPauseReplay = false
+local pausedState = { isPaused=false, platformIndex=nil, movementIndex=nil, skipPathfind=false }
 
 ----------------------------------------------------------
--- HELPERS: Character/Force Movement (disalin)
+-- HELPERS
 ----------------------------------------------------------
 local function setupCharacterForce(characterToSetup)
     local humanoidToSetup = characterToSetup:WaitForChild("Humanoid")
-    local function onStateChanged(_, newState)
+    humanoidToSetup.StateChanged:Connect(function(_, newState)
         isClimbing = (newState == Enum.HumanoidStateType.Climbing)
-    end
-    local stateConnection = humanoidToSetup.StateChanged:Connect(onStateChanged)
-    table.insert(allConnections, stateConnection)
+    end)
 end
+setupCharacterForce(character)
 
 local function stopForceMovement()
-    if forceActiveConnection then
-        forceActiveConnection:Disconnect()
-        forceActiveConnection = nil
-    end
-    local char = player.Character
-    if char and char.PrimaryPart then
-        local rootPart = char.PrimaryPart
-        rootPart.AssemblyLinearVelocity = Vector3.new(0, rootPart.AssemblyLinearVelocity.Y, 0)
-    end
+    if forceActiveConnection then forceActiveConnection:Disconnect() forceActiveConnection=nil end
+    local root = character.PrimaryPart
+    if root then root.AssemblyLinearVelocity = Vector3.new(0, root.AssemblyLinearVelocity.Y, 0) end
 end
 
 local function startForceMovement()
     if forceActiveConnection then return end
     forceActiveConnection = RunService.Heartbeat:Connect(function()
-        local char = player.Character
-        local rootPart = char and char.PrimaryPart
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if not rootPart or not hum then
-            stopForceMovement()
-            return
-        end
-        if isClimbing then return end
-        local verticalVelocity = rootPart.AssemblyLinearVelocity.Y
+        local root, hum = character.PrimaryPart, character:FindFirstChildOfClass("Humanoid")
+        if not root or not hum or isClimbing then return end
         local moveSpeed = hum.WalkSpeed * forceSpeedMultiplier
-        local lookVector = rootPart.CFrame.LookVector
-        local horizontalDirection = Vector3.new(lookVector.X, 0, lookVector.Z).Unit
-        local horizontalVelocity = horizontalDirection * moveSpeed
-        rootPart.AssemblyLinearVelocity = Vector3.new(horizontalVelocity.X, verticalVelocity, horizontalVelocity.Z)
+        local dir = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z).Unit
+        local horizVel = dir * moveSpeed
+        root.AssemblyLinearVelocity = Vector3.new(horizVel.X, root.AssemblyLinearVelocity.Y, horizVel.Z)
     end)
 end
 
@@ -113,767 +78,211 @@ local function calculatePath(start, goal)
 end
 
 local function isCharacterMoving()
-    local currentPosition = character.PrimaryPart.Position
+    local pos = character.PrimaryPart.Position
     if lastPosition then
-        local distance = (currentPosition - lastPosition).Magnitude
-        lastPosition = currentPosition
-        return distance > 0.05
+        local dist = (pos - lastPosition).Magnitude
+        lastPosition = pos
+        return dist > 0.05
     end
-    lastPosition = currentPosition
+    lastPosition = pos
     return false
 end
 
-local function addTextLabelToPlatform(platform, platformNumber)
-    local billboardGui = Instance.new("BillboardGui")
-    billboardGui.Size = UDim2.new(1, 0, 0.5, 0)
-    billboardGui.StudsOffset = Vector3.new(0, 3, 0)
-    billboardGui.AlwaysOnTop = true
-    local textLabel = Instance.new("TextLabel")
-    textLabel.Size = UDim2.new(1, 0, 1, 0)
-    textLabel.BackgroundTransparency = 1
-    textLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    textLabel.TextScaled = true
-    textLabel.Text = tostring(platformNumber)
-    textLabel.Parent = billboardGui
-    billboardGui.Parent = platform
-end
-
-local function cleanupPlatform(platform)
-    for i, p in ipairs(platforms) do
-        if p == platform then
-            table.remove(platforms, i)
-            platformData[platform] = nil
-            break
-        end
+local function UpdateStatus(t)
+    if getfenv().__WS_STATUS_LABEL then
+        getfenv().__WS_STATUS_LABEL:SetText("Status: " .. t)
     end
 end
 
 ----------------------------------------------------------
--- SERIALIZE / DESERIALIZE (disalin)
+-- PLATFORM SERIALIZER
 ----------------------------------------------------------
 local function serializePlatformData()
-    local data = { redPlatforms = {}, yellowPlatforms = {}, mappings = {} }
-    for i, platform in ipairs(platforms) do
-        local movementsData = {}
-        for _, movement in ipairs(platformData[platform] or {}) do
-            table.insert(movementsData, {
-                position = { X = movement.position.X, Y = movement.position.Y, Z = movement.position.Z },
-                orientation = { X = movement.orientation.X, Y = movement.orientation.Y, Z = movement.orientation.Z },
-                isJumping = movement.isJumping
-            })
+    local data={redPlatforms={},yellowPlatforms={},mappings={}}
+    for _,p in ipairs(platforms) do
+        local moves={}
+        for _,m in ipairs(platformData[p] or {}) do
+            table.insert(moves,{position={X=m.position.X,Y=m.position.Y,Z=m.position.Z},
+            orientation={X=m.orientation.X,Y=m.orientation.Y,Z=m.orientation.Z},isJumping=m.isJumping})
         end
-        table.insert(data.redPlatforms, {
-            position = { X = platform.Position.X, Y = platform.Position.Y, Z = platform.Position.Z },
-            movements = movementsData
-        })
-    end
-    for i, yellowPlatform in ipairs(yellowPlatforms) do
-        table.insert(data.yellowPlatforms, {
-            position = { X = yellowPlatform.Position.X, Y = yellowPlatform.Position.Y, Z = yellowPlatform.Position.Z }
-        })
-        if yellowToRedMapping[yellowPlatform] then
-            local redIndex = table.find(platforms, yellowToRedMapping[yellowPlatform])
-            table.insert(data.mappings, redIndex)
-        end
+        table.insert(data.redPlatforms,{position={X=p.Position.X,Y=p.Position.Y,Z=p.Position.Z},movements=moves})
     end
     return HttpService:JSONEncode(data)
 end
 
-local function deserializePlatformData(jsonData)
-    local success, data = pcall(function() return HttpService:JSONDecode(jsonData) end)
-    if not success then
-        return false, "Failed to decode JSON data"
-    end
-    if not data or type(data) ~= "table" then
-        return false, "Invalid data format"
-    end
-
-    -- Clear existing
-    for _, platform in ipairs(platforms) do platform:Destroy() end
-    for _, yellowPlatform in ipairs(yellowPlatforms) do yellowPlatform:Destroy() end
-    platforms, yellowPlatforms, yellowToRedMapping, platformData = {}, {}, {}, {}
-    platformCounter = 0
-
-    -- Red platforms
-    if data.redPlatforms then
-        for _, platformInfo in ipairs(data.redPlatforms) do
-            local platform = Instance.new("Part")
-            platform.Size = Vector3.new(5, 1, 5)
-            platform.Position = Vector3.new(platformInfo.position.X, platformInfo.position.Y, platformInfo.position.Z)
-            platform.Anchored = true
-            platform.BrickColor = BrickColor.Red()
-            platform.CanCollide = false
-            platform.Parent = workspace
-
-            local restoredMovements = {}
-            if platformInfo.movements then
-                for _, movement in ipairs(platformInfo.movements) do
-                    table.insert(restoredMovements, {
-                        position = Vector3.new(movement.position.X, movement.position.Y, movement.position.Z),
-                        orientation = Vector3.new(movement.orientation.X, movement.orientation.Y, movement.orientation.Z),
-                        isJumping = movement.isJumping
-                    })
-                end
-            end
-            platformData[platform] = restoredMovements
-
-            addTextLabelToPlatform(platform, #platforms + 1)
-            table.insert(platforms, platform)
-            platformCounter += 1
+local function deserializePlatformData(json)
+    local ok,data = pcall(function()return HttpService:JSONDecode(json)end)
+    if not ok then return false end
+    for _,p in ipairs(platforms) do p:Destroy() end
+    platforms,platformData={},{}
+    for _,info in ipairs(data.redPlatforms or {}) do
+        local p=Instance.new("Part")
+        p.Size=Vector3.new(5,1,5) p.Position=Vector3.new(info.position.X,info.position.Y,info.position.Z)
+        p.Anchored=true p.BrickColor=BrickColor.Red() p.CanCollide=false p.Parent=workspace
+        platformData[p]={}
+        for _,m in ipairs(info.movements or {}) do
+            table.insert(platformData[p],{position=Vector3.new(m.position.X,m.position.Y,m.position.Z),
+            orientation=Vector3.new(m.orientation.X,m.orientation.Y,m.orientation.Z),isJumping=m.isJumping})
         end
+        table.insert(platforms,p)
     end
-
-    -- Yellow + mappings
-    if data.yellowPlatforms then
-        for i, yellowInfo in ipairs(data.yellowPlatforms) do
-            local yellowPlatform = Instance.new("Part")
-            yellowPlatform.Size = Vector3.new(5, 1, 5)
-            yellowPlatform.Position = Vector3.new(yellowInfo.position.X, yellowInfo.position.Y, yellowInfo.position.Z)
-            yellowPlatform.Anchored = true
-            yellowPlatform.BrickColor = BrickColor.Yellow()
-            yellowPlatform.CanCollide = false
-            yellowPlatform.Parent = workspace
-
-            if data.mappings and data.mappings[i] then
-                addTextLabelToPlatform(yellowPlatform, data.mappings[i])
-                if platforms[data.mappings[i]] then
-                    yellowToRedMapping[yellowPlatform] = platforms[data.mappings[i]]
-                end
-            end
-            table.insert(yellowPlatforms, yellowPlatform)
-        end
-    end
-
     return true
 end
 
 ----------------------------------------------------------
--- RECORD / STOP / DELETE / DESTROY (dibuat fungsi)
+-- REPLAY LOGIC + PAUSE/RESUME
 ----------------------------------------------------------
-local function UpdateStatus(text)
-    -- setter status untuk UI Obsidian (di-assign setelah UI dibuat)
-    if getfenv().__WS_STATUS_LABEL then
-        getfenv().__WS_STATUS_LABEL:SetText("Status: "..text)
-    end
-end
-
-local function StartRecord()
-    if recording then return end
-    recording = true
-    UpdateStatus("Recording")
-
-    -- Jika sudah ada yellow, jalan ke titik terakhir dulu
-    if #yellowPlatforms > 0 then
-        local lastYellowPlatform = yellowPlatforms[#yellowPlatforms]
-        local humanoidCurrent = character:WaitForChild("Humanoid")
-        local rootPart = character:WaitForChild("HumanoidRootPart")
-        if humanoidCurrent and humanoidCurrent.Health > 0 then
-            local path = calculatePath(rootPart.Position, lastYellowPlatform.Position + Vector3.new(0,3,0))
-            if path.Status == Enum.PathStatus.Success then
-                for _, waypoint in ipairs(path:GetWaypoints()) do
-                    humanoidCurrent:MoveTo(waypoint.Position)
-                    if waypoint.Action == Enum.PathWaypointAction.Jump then
-                        humanoidCurrent.Jump = true
-                    end
-                    humanoidCurrent.MoveToFinished:Wait()
-                end
-            else
-                humanoidCurrent:MoveTo(lastYellowPlatform.Position + Vector3.new(0,3,0))
-                humanoidCurrent.MoveToFinished:Wait()
-            end
+local function walkToPlatform(dest)
+    local hum = character:WaitForChild("Humanoid")
+    local root = character:WaitForChild("HumanoidRootPart")
+    local path = calculatePath(root.Position,dest)
+    if path.Status==Enum.PathStatus.Success then
+        for _,wp in ipairs(path:GetWaypoints()) do
+            if shouldStopReplay or shouldPauseReplay then break end
+            hum:MoveTo(wp.Position)
+            if wp.Action==Enum.PathWaypointAction.Jump then hum.Jump=true end
+            hum.MoveToFinished:Wait()
         end
     else
-        -- Penjaga (no-op)
-        if character and character.PrimaryPart then
-            character:SetPrimaryPartCFrame(CFrame.new(character.PrimaryPart.Position))
-        end
-    end
-
-    -- Buat red platform baru
-    platformCounter += 1
-    local platform = Instance.new("Part")
-    platform.Name = "Platform " .. platformCounter
-    platform.Size = Vector3.new(5, 1, 5)
-    platform.Position = character.PrimaryPart.Position - Vector3.new(0, 3, 0)
-    platform.Anchored = true
-    platform.BrickColor = BrickColor.Red()
-    platform.CanCollide = false
-    platform.Parent = workspace
-    addTextLabelToPlatform(platform, platformCounter)
-    table.insert(platforms, platform)
-    platformData[platform] = {}
-
-    -- Rekam per Heartbeat
-    task.spawn(function()
-        while recording do
-            if not platform or not platform.Parent then
-                recording = false
-                UpdateStatus("Error: Missing Red Platform (Recording Stopped)")
-                break
-            end
-            if isCharacterMoving() then
-                table.insert(platformData[platform], {
-                    position   = character.PrimaryPart.Position,
-                    orientation= character.PrimaryPart.Orientation,
-                    isJumping  = humanoid.Jump
-                })
-            end
-            RunService.Heartbeat:Wait()
-        end
-    end)
-end
-
-local function StopRecord()
-    if not recording then return end
-    recording = false
-    UpdateStatus("Stopped Recording")
-
-    local yellowPlatform = Instance.new("Part")
-    yellowPlatform.Size = Vector3.new(5, 1, 5)
-    yellowPlatform.Position = character.PrimaryPart.Position - Vector3.new(0, 3, 0)
-    yellowPlatform.Anchored = true
-    yellowPlatform.BrickColor = BrickColor.Yellow()
-    yellowPlatform.CanCollide = false
-    yellowPlatform.Parent = workspace
-
-    addTextLabelToPlatform(yellowPlatform, platformCounter)
-    table.insert(yellowPlatforms, yellowPlatform)
-    yellowToRedMapping[yellowPlatform] = platforms[#platforms]
-end
-
-local function StopReplay()
-    if replaying then
-        shouldStopReplay = true
-        replaying = false
-        stopForceMovement()
-        if character:FindFirstChild("Humanoid") and character:FindFirstChild("HumanoidRootPart") then
-            character.Humanoid:MoveTo(character.HumanoidRootPart.Position)
-        end
-        UpdateStatus(("Stopped at Platform %d/%d"):format(math.max(currentPlatformIndex-1,0), totalPlatformsToPlay))
-        task.delay(1.0, function() UpdateStatus("Idle") end)
+        hum:MoveTo(dest) hum.MoveToFinished:Wait()
     end
 end
 
-local function DestroyAll()
-    for _, platform in ipairs(platforms) do platform:Destroy() end
-    for _, yellowPlatform in ipairs(yellowPlatforms) do yellowPlatform:Destroy() end
-    platforms, yellowPlatforms, platformData, yellowToRedMapping = {}, {}, {}, {}
-    platformCounter = 0
-    stopForceMovement()
-    for _, c in ipairs(allConnections) do c:Disconnect() end
-    allConnections = {}
-    UpdateStatus("Idle")
-end
+local function ReplayFrom(startIndex,movIndex,skipPath)
+    totalPlatformsToPlay=#platforms
+    currentPlatformIndex=math.clamp(startIndex or 1,1,#platforms)
+    movIndex=movIndex or 1
+    skipPath=skipPath or false
+    replaying=true shouldStopReplay=false shouldPauseReplay=false
 
-local function DeleteLastPlatform()
-    if #platforms == 0 then return end
-    local lastPlatform = platforms[#platforms]
-    lastPlatform:Destroy()
-    cleanupPlatform(lastPlatform)
-
-    -- hapus label/tampilan (di UI baru ini list pakai dropdown -> akan di-refresh)
-    platformCounter -= 1
-
-    -- Bersihkan yellow yang map ke platform yang sudah dihapus
-    for yellowPlatform, redPlatform in pairs(yellowToRedMapping) do
-        if not table.find(platforms, redPlatform) then
-            yellowPlatform:Destroy()
-            yellowToRedMapping[yellowPlatform] = nil
-            local idx = table.find(yellowPlatforms, yellowPlatform)
-            if idx then table.remove(yellowPlatforms, idx) end
-        end
-    end
-end
-
-----------------------------------------------------------
--- SAVE / NEXT CHUNK / LOAD (URL/RAW + stacking) (disalin)
-----------------------------------------------------------
-local function SaveAll()
-    local jsonData = serializePlatformData()
-    if #jsonData > 190000 then
-        local allData = HttpService:JSONDecode(jsonData)
-        saveChunks = {}
-        local redCount = #allData.redPlatforms
-        totalChunks = math.ceil(redCount / CHUNK_SIZE)
-        for chunkIndex = 1, totalChunks do
-            local startIndex = (chunkIndex-1)*CHUNK_SIZE + 1
-            local endIndex = math.min(chunkIndex*CHUNK_SIZE, redCount)
-            local chunk = { redPlatforms = {}, yellowPlatforms = {}, mappings = {} }
-            for i = startIndex, endIndex do
-                table.insert(chunk.redPlatforms, allData.redPlatforms[i])
-            end
-            for i, mapping in ipairs(allData.mappings) do
-                if mapping >= startIndex and mapping <= endIndex then
-                    table.insert(chunk.yellowPlatforms, allData.yellowPlatforms[i])
-                    table.insert(chunk.mappings, mapping - startIndex + 1)
-                end
-            end
-            saveChunks[chunkIndex] = HttpService:JSONEncode(chunk)
-        end
-        currentChunkIndex = 1
-        setclipboard(saveChunks[currentChunkIndex])
-        UpdateStatus(("Chunk %d/%d copied. Save then press Next Chunk"):format(currentChunkIndex, totalChunks))
-    else
-        setclipboard(jsonData)
-        saveChunks, currentChunkIndex, totalChunks = {}, 0, 0
-        UpdateStatus("Platform data copied to clipboard")
-    end
-end
-
-local function NextChunk()
-    if #saveChunks > 0 and currentChunkIndex < totalChunks then
-        currentChunkIndex += 1
-        setclipboard(saveChunks[currentChunkIndex])
-        UpdateStatus(("Chunk %d/%d copied"):format(currentChunkIndex, totalChunks))
-    elseif currentChunkIndex == totalChunks and totalChunks > 0 then
-        UpdateStatus("All chunks have been copied")
-    else
-        UpdateStatus("No chunks to copy")
-    end
-end
-
-local function _LoadFromString(input)
-    local loadedSuccessfully = false
-    if input:match("^https?://") then
-        UpdateStatus("Loading 0%")
-        local ok, response = pcall(function() return game:HttpGet(input) end)
-        if ok and response then
-            -- coba stacked line-per-line
-            local combinedData = { redPlatforms={}, yellowPlatforms={}, mappings={} }
-            local redOffset = 0
-            local stackedOK = false
-            for jsonStr in response:gmatch("[^\r\n]+") do
-                local okj, chunk = pcall(function() return HttpService:JSONDecode(jsonStr) end)
-                if okj and type(chunk)=="table" and type(chunk.redPlatforms)=="table" then
-                    stackedOK = true
-                    for _, rp in ipairs(chunk.redPlatforms) do table.insert(combinedData.redPlatforms, rp) end
-                    if type(chunk.yellowPlatforms)=="table" then
-                        for i, yp in ipairs(chunk.yellowPlatforms) do
-                            table.insert(combinedData.yellowPlatforms, yp)
-                            if type(chunk.mappings)=="table" and chunk.mappings[i] then
-                                table.insert(combinedData.mappings, chunk.mappings[i] + redOffset)
-                            end
-                        end
-                    end
-                    redOffset += #chunk.redPlatforms
-                end
-            end
-            if stackedOK then
-                local combinedJson = HttpService:JSONEncode(combinedData)
-                local ok2 = deserializePlatformData(combinedJson)
-                loadedSuccessfully = ok2 and true or false
-            else
-                loadedSuccessfully = deserializePlatformData(response)
-            end
-        else
-            UpdateStatus("Load failed (URL)")
-            return
-        end
-    else
-        -- RAW input: coba stacked
-        local combinedData = { redPlatforms={}, yellowPlatforms={}, mappings={} }
-        local redOffset = 0
-        local stackedOK = false
-        for jsonStr in input:gmatch("[^\r\n]+") do
-            local okj, chunk = pcall(function() return HttpService:JSONDecode(jsonStr) end)
-            if okj and type(chunk)=="table" and type(chunk.redPlatforms)=="table" then
-                stackedOK = true
-                for _, rp in ipairs(chunk.redPlatforms) do table.insert(combinedData.redPlatforms, rp) end
-                if type(chunk.yellowPlatforms)=="table" then
-                    for i, yp in ipairs(chunk.yellowPlatforms) do
-                        table.insert(combinedData.yellowPlatforms, yp)
-                        if type(chunk.mappings)=="table" and chunk.mappings[i] then
-                            table.insert(combinedData.mappings, chunk.mappings[i] + redOffset)
-                        end
-                    end
-                end
-                redOffset += #chunk.redPlatforms
-            end
-        end
-        if stackedOK then
-            local combinedJson = HttpService:JSONEncode(combinedData)
-            local ok2 = deserializePlatformData(combinedJson)
-            loadedSuccessfully = ok2 and true or false
-        else
-            loadedSuccessfully = deserializePlatformData(input)
-        end
-    end
-
-    if loadedSuccessfully then
-        UpdateStatus("Platform data loaded")
-    else
-        UpdateStatus("Failed to parse/load data")
-    end
-end
-
-----------------------------------------------------------
--- REPLAY PLATFORM (disalin, diringkas sebagai fungsi)
-----------------------------------------------------------
-local function walkToPlatform(destination)
-    local humanoidCurrent = character:WaitForChild("Humanoid")
-    local rootPart = character:WaitForChild("HumanoidRootPart")
-    if not humanoidCurrent or humanoidCurrent.Health <= 0 then return end
-    local path = calculatePath(rootPart.Position, destination)
-    if path.Status == Enum.PathStatus.Success then
-        local waypoints = path:GetWaypoints()
-        for _, waypoint in ipairs(waypoints) do
-            if shouldStopReplay then break end
-            humanoidCurrent:MoveTo(waypoint.Position)
-            if waypoint.Action == Enum.PathWaypointAction.Jump then
-                humanoidCurrent.Jump = true
-            end
-            humanoidCurrent.MoveToFinished:Wait()
-        end
-    else
-        humanoidCurrent:MoveTo(destination)
-        humanoidCurrent.MoveToFinished:Wait()
-    end
-end
-
-local function ReplayFrom(indexStart)
-    totalPlatformsToPlay = #platforms
-    currentPlatformIndex = indexStart
-    for i = indexStart, #platforms do
+    for i=currentPlatformIndex,#platforms do
         if shouldStopReplay then break end
-        UpdateStatus(("Playing from Platform %d/%d"):format(currentPlatformIndex, totalPlatformsToPlay))
-        local currentPlatform = platforms[i]
-
-        -- Phase 1: pathfind ke platform
-        stopForceMovement()
-        walkToPlatform(currentPlatform.Position + Vector3.new(0,3,0))
-        if shouldStopReplay then break end
-
-        -- Phase 2: interpolasi movement
-        local movements = platformData[currentPlatform]
-        if movements and #movements > 1 then
+        UpdateStatus(("Playing %d/%d"):format(i,totalPlatformsToPlay))
+        local p=platforms[i]
+        if not skipPath then
+            stopForceMovement()
+            walkToPlatform(p.Position+Vector3.new(0,3,0))
+            if shouldStopReplay or shouldPauseReplay then break end
+        end
+        local moves=platformData[p]
+        if moves and #moves>1 then
             startForceMovement()
-            for j = 1, #movements-1 do
+            for j=movIndex,#moves-1 do
                 if shouldStopReplay then break end
-                local a = movements[j]
-                local b = movements[j+1]
-                b.isJumping = a.isJumping
-
-                local startTime = tick()
-                local distance = (b.position - a.position).Magnitude
-                local duration = math.max(distance * 0.01, 0.01)
-                local endTime = startTime + duration
-
-                while tick() < endTime do
-                    if shouldStopReplay then break end
-                    local alpha = math.clamp((tick() - startTime)/duration, 0, 1)
-                    local pos = a.position:Lerp(b.position, alpha)
-                    local cfA = CFrame.fromEulerAnglesXYZ(math.rad(a.orientation.X), math.rad(a.orientation.Y), math.rad(a.orientation.Z))
-                    local cfB = CFrame.fromEulerAnglesXYZ(math.rad(b.orientation.X), math.rad(b.orientation.Y), math.rad(b.orientation.Z))
-                    local rot = cfA:Lerp(cfB, alpha)
-                    character:SetPrimaryPartCFrame(CFrame.new(pos) * rot)
-                    if b.isJumping then humanoid.Jump = true end
+                if shouldPauseReplay then
+                    pausedState={isPaused=true,platformIndex=i,movementIndex=j,skipPathfind=true}
+                    replaying=false stopForceMovement()
+                    UpdateStatus(("Paused @P%d step %d"):format(i,j))
+                    return
+                end
+                local a,b=moves[j],moves[j+1]
+                b.isJumping=a.isJumping
+                local st,et=tick(),tick()+math.max((b.position-a.position).Magnitude*0.01,0.01)
+                while tick()<et do
+                    if shouldStopReplay or shouldPauseReplay then break end
+                    local alpha=math.clamp((tick()-st)/(et-st),0,1)
+                    local pos=a.position:Lerp(b.position,alpha)
+                    local rot=CFrame.fromEulerAnglesXYZ(math.rad(a.orientation.X),math.rad(a.orientation.Y),math.rad(a.orientation.Z))
+                    local rot2=CFrame.fromEulerAnglesXYZ(math.rad(b.orientation.X),math.rad(b.orientation.Y),math.rad(b.orientation.Z))
+                    character:SetPrimaryPartCFrame(CFrame.new(pos)*rot:Lerp(rot2,alpha))
+                    if b.isJumping then humanoid.Jump=true end
                     RunService.Heartbeat:Wait()
                 end
             end
             stopForceMovement()
         end
-
-        task.wait(0.5)
-        currentPlatformIndex += 1
+        movIndex,skipPath=1,false
+        task.wait(0.3)
     end
-
-    if not shouldStopReplay then
-        UpdateStatus("Completed all platforms")
-        task.wait(1)
-    end
-    replaying = false
-    UpdateStatus("Idle")
-    stopForceMovement()
+    replaying=false stopForceMovement()
+    UpdateStatus("Completed ✅")
 end
 
-local function PlayPlatform(index)
-    if replaying then return end
-    if currentReplayThread then shouldStopReplay = true task.wait() end
-    if not index or index < 1 or index > #platforms then
-        UpdateStatus("Invalid platform index")
-        return
-    end
-    replaying = true
-    shouldStopReplay = false
-    currentReplayThread = task.spawn(function()
-        ReplayFrom(index)
-        currentReplayThread = nil
-    end)
+local function PauseReplay() if replaying then shouldPauseReplay=true end end
+local function ResumeReplay()
+    if not pausedState.isPaused then return UpdateStatus("Nothing to resume") end
+    local p,m,s=pausedState.platformIndex,pausedState.movementIndex,pausedState.skipPathfind
+    pausedState={isPaused=false} task.spawn(function() ReplayFrom(p,m,s) end)
 end
 
-----------------------------------------------------------
--- PLATFORM LIST HELPERS (untuk Tab Platform List)
-----------------------------------------------------------
-local function GetPlatformList()
-    local list = {}
-    for i = 1, #platforms do
-        list[i] = ("Platform %d"):format(i)
-    end
-    if #list == 0 then list = {"(no platforms)"} end
-    return list
+local function StopReplay()
+    if replaying then shouldStopReplay=true replaying=false stopForceMovement()
+        UpdateStatus(("Stopped @P%d"):format(currentPlatformIndex)) end
 end
 
-local function DeletePlatformIndex(idx)
-    if not idx or idx < 1 or idx > #platforms then return end
-    local p = platforms[idx]
-    if p then p:Destroy() end
-    cleanupPlatform(p)
-    -- bersihkan yellow yang map ke platform ini
-    for yellowPlatform, redPlatform in pairs(yellowToRedMapping) do
-        if redPlatform == p then
-            yellowPlatform:Destroy()
-            yellowToRedMapping[yellowPlatform] = nil
-            local iy = table.find(yellowPlatforms, yellowPlatform)
-            if iy then table.remove(yellowPlatforms, iy) end
-        end
-    end
-    platformCounter = #platforms
+local function GetNearestPlatformIndexFromPosition(pos)
+    if #platforms==0 then return 1 end
+    local best,dist=1,math.huge
+    for i,p in ipairs(platforms) do local d=(p.Position-pos).Magnitude if d<dist then dist=d best=i end end
+    return best
 end
-
-local function HighlightPlatformIndex(idx)
-    if not idx or idx < 1 or idx > #platforms then return end
-    local p = platforms[idx]
-    if not p then return end
-    local old = p.Color
-    p.Color = Color3.fromRGB(0, 255, 0)
-    task.delay(0.5, function() if p and p.Parent then p.Color = old end end)
-end
-
-----------------------------------------------------------
--- RESPAWN HANDLER (disalin)
-----------------------------------------------------------
-player.CharacterAdded:Connect(function(newCharacter)
-    character = newCharacter
-    humanoid = newCharacter:WaitForChild("Humanoid")
-    lastPosition = nil
-    UpdateStatus("Idle")
-
-    for _, c in ipairs(allConnections) do c:Disconnect() end
-    allConnections = {}
-    setupCharacterForce(newCharacter)
-
-    if recording then
-        platforms, yellowPlatforms, platformData, yellowToRedMapping = {}, {}, {}, {}
-        platformCounter = 0
-    end
-
-    stopForceMovement()
-    shouldStopReplay = true
-    replaying = false
-    if currentReplayThread then
-        task.cancel(currentReplayThread)
-        currentReplayThread = nil
-    end
-end)
-
-if player.Character then setupCharacterForce(player.Character) end
 
 ----------------------------------------------------------
 -- OBSIDIAN UI
 ----------------------------------------------------------
-local Window = Library:CreateWindow({
-    Title = "WS",
-    Footer = "Auto Walk (Obsidian)",
-    Icon = 95816097006870,
-    ShowCustomCursor = true,
-})
+local Window=Library:CreateWindow({Title="WS",Footer="Auto Walk (Obsidian)",Icon=95816097006870,ShowCustomCursor=true})
+local Tabs={Main=Window:AddTab("Main Control","zap"),Auto=Window:AddTab("Auto Walk","map-pin"),Theme=Window:AddTab("Setting","settings")}
 
-local Tabs = {
-	Main  = Window:AddTab("Main Control", "zap"),
-	Data  = Window:AddTab("Data", "folder"),
-	List  = Window:AddTab("Platform List", "map"),
-	Theme = Window:AddTab("Setting", "settings"),
-}
+local StatusBox=Tabs.Main:AddRightGroupbox("Status")
+local statusLabel=StatusBox:AddLabel("Status: Idle")
+getfenv().__WS_STATUS_LABEL=statusLabel
 
----------------------------------------------------------
--- 🧭 AUTO WALK TAB (Antartika) — FIX: Full Working
----------------------------------------------------------
-task.spawn(function()
-    while not Window or typeof(Window.AddTab) ~= "function" do
-        task.wait(0.25)
+----------------------------------------------------------
+-- AUTO WALK TAB
+----------------------------------------------------------
+local GLeft=Tabs.Auto:AddLeftGroupbox("Antartika")
+local autoStatus=GLeft:AddLabel("Status: Idle")
+local PathList={"https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/allpath.json"}
+local PathsLoaded={}
+local function setAutoStatus(t) pcall(function() autoStatus:Set("Status: "..t) end) end
+
+GLeft:AddButton("📥 Load All",function()
+    setAutoStatus("Loading...")
+    PathsLoaded={}
+    for _,url in ipairs(PathList) do
+        local ok,res=pcall(function()return game:HttpGet(url)end)
+        if ok and res and #res>100 then table.insert(PathsLoaded,res) end
     end
-
-    local okInit, errInit = pcall(function()
-        local AutoWalkTab = Window:AddTab("Auto Walk", "map-pin")
-        local GLeft = AutoWalkTab:AddLeftGroupbox("Map Antartika")
-        local autoStatus = GLeft:AddLabel("Status: Idle")
-
-        local PathList = {
-            "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/allpath.json",
-        }
-
-        local PathsLoaded = {}
-        local isReplaying, shouldStop = false, false
-
-        local function setAutoStatus(text)
-            pcall(function() autoStatus:Set("Status: " .. text) end)
-        end
-
-        -----------------------------------------------------
-        -- 📥 LOAD ALL PATHS
-        -----------------------------------------------------
-        GLeft:AddButton("📥 Load All", function()
-            task.spawn(function()
-                setAutoStatus("Loading...")
-                PathsLoaded = {}
-
-                for i, url in ipairs(PathList) do
-                    local okGet, data = pcall(function()
-                        return game:HttpGet(url)
-                    end)
-                    if okGet and type(data) == "string" and #data > 100 then
-                        table.insert(PathsLoaded, data)
-                        print(("[AutoWalk] ✅ Loaded Path %d (%d bytes)"):format(i, #data))
-                    else
-                        warn("[AutoWalk] ⚠️ Gagal load Path "..i.." → "..tostring(url))
-                    end
-                    task.wait(0.2)
-                end
-
-                if #PathsLoaded > 0 then
-                    setAutoStatus(("%d Path Loaded ✅"):format(#PathsLoaded))
-                else
-                    setAutoStatus("Load Failed ❌")
-                end
-            end)
-        end)
-
-		-----------------------------------------------------
-        -- ▶ PLAY ALL PATHS (gunakan ReplayFrom)
-        -----------------------------------------------------
-        GLeft:AddButton("▶ Play", function()
-            task.spawn(function()
-                if isReplaying then return end
-                if #PathsLoaded == 0 then
-                    setAutoStatus("No Path Loaded")
-                    return
-                end
-
-                isReplaying, shouldStop = true, false
-                setAutoStatus("Playing...")
-
-                for i, jsonData in ipairs(PathsLoaded) do
-                    if shouldStop then break end
-
-                    setAutoStatus(("Loading Path %d..."):format(i))
-                    local okDes = pcall(function()
-                        deserializePlatformData(jsonData)
-                    end)
-
-                    if okDes then
-                        setAutoStatus(("Replaying Path %d ▶"):format(i))
-                        local okPlay = pcall(function()
-                            ReplayFrom(1)
-                        end)
-                        if not okPlay then
-                            warn("[AutoWalk] Replay error on Path "..i)
-                        end
-                    else
-                        warn("[AutoWalk] Deserialize error Path "..i)
-                    end
-                    task.wait(0.3)
-                end
-
-                isReplaying = false
-                if shouldStop then
-                    setAutoStatus("Stopped ⛔")
-                else
-                    setAutoStatus("Completed ✅")
-                end
-            end)
-        end)
-
-        -----------------------------------------------------
-        -- ⛔ STOP
-        -----------------------------------------------------
-        GLeft:AddButton("⛔ Stop", function()
-            shouldStop = true
-            isReplaying = false
-            pcall(stopForceMovement)
-            setAutoStatus("Stopped ⛔")
-        end)
-    end)
-	
-    if not okInit then
-        warn("[AutoWalk Tab Init Error]:", errInit)
-    end
+    setAutoStatus(("%d Path Loaded ✅"):format(#PathsLoaded))
 end)
 
-
--- 🔧 Status Label global (pojok bawah)
-local StatusBox = Tabs.Main:AddRightGroupbox("Status")
-local statusLabel = StatusBox:AddLabel("Status: Idle")
-getfenv().__WS_STATUS_LABEL = statusLabel
-
--- ===== Tab Main Control
-local MC_L = Tabs.Main:AddLeftGroupbox("Actions")
-MC_L:AddButton("Record", StartRecord)
-MC_L:AddButton("Stop Record", StopRecord)
-MC_L:AddButton("Stop Replay", StopReplay)
-MC_L:AddButton("Delete (Last Red)", DeleteLastPlatform)
-MC_L:AddButton("Destroy All", DestroyAll)
-
--- ===== Tab Data
-local D_L = Tabs.Data:AddLeftGroupbox("Save / Chunk")
-D_L:AddButton("Save", SaveAll)
-D_L:AddButton("Next Chunk", NextChunk)
-
-local D_R = Tabs.Data:AddRightGroupbox("Load JSON/URL")
-local _loadInput = ""
-D_R:AddInput("WS_LoadInput", {
-    Text = "Paste RAW JSON atau URL",
-    Default = "",
-    Placeholder = "https://... | { ...json... }",
-    Finished = true,
-    Callback = function(v) _loadInput = v or "" end
-})
-D_R:AddButton("Load", function()
-    if (_loadInput or ""):gsub("%s","") == "" then
-        UpdateStatus("No data to load")
-        return
-    end
-    _LoadFromString(_loadInput)
-end)
-
--- ===== Tab Platform List
-local PL_L = Tabs.List:AddLeftGroupbox("Select Platform")
-local currentList = GetPlatformList()
-local currentIndex = 1
-local dd = PL_L:AddDropdown("WS_PlatformPick", {
-    Values = currentList,
-    Default = currentList[1],
-    Multi = false,
-    Text = "Platforms",
-    Callback = function(val)
-        for i, v in ipairs(currentList) do
-            if v == val then currentIndex = i break end
+-- ▶ PLAY (nearest)
+GLeft:AddButton("▶ Play (nearest)",function()
+    if replaying then return end
+    if #PathsLoaded==0 then return setAutoStatus("No Path Loaded") end
+    setAutoStatus("Preparing...")
+    local rp=character:WaitForChild("HumanoidRootPart")
+    for i,data in ipairs(PathsLoaded) do
+        if deserializePlatformData(data) then
+            local startIdx=GetNearestPlatformIndexFromPosition(rp.Position)
+            setAutoStatus(("Play %d ▶ @%d"):format(i,startIdx))
+            task.spawn(function() ReplayFrom(startIdx,1,false) end)
         end
     end
-})
-PL_L:AddButton("Refresh", function()
-    currentList = GetPlatformList()
-    dd:SetValues(currentList)
-    dd:SetValue(currentList[1])
-    currentIndex = 1
-    UpdateStatus("Platform list refreshed")
 end)
 
-local PL_R = Tabs.List:AddRightGroupbox("Action")
-PL_R:AddButton("Play Selected", function() PlayPlatform(currentIndex) end)
-PL_R:AddButton("Delete Selected", function()
-    DeletePlatformIndex(currentIndex)
-    currentList = GetPlatformList()
-    dd:SetValues(currentList)
-    dd:SetValue(currentList[1])
-    currentIndex = 1
-end)
-PL_R:AddButton("Highlight Selected", function() HighlightPlatformIndex(currentIndex) end)
+-- ⏸ Pause
+GLeft:AddButton("⏸ Pause",function() if replaying then shouldPauseReplay=true setAutoStatus("Pausing...") end end)
 
--- ===== Theme / Config
+-- ⏵ Resume
+GLeft:AddButton("⏵ Resume",function()
+    if pausedState.isPaused then setAutoStatus("Resuming...") ResumeReplay()
+    else setAutoStatus("Nothing paused") end
+end)
+
+-- ⛔ Stop
+GLeft:AddButton("⛔ Stop",function() StopReplay() setAutoStatus("Stopped ⛔") end)
+
+----------------------------------------------------------
+-- MAIN TAB ACTIONS
+----------------------------------------------------------
+local MC=Tabs.Main:AddLeftGroupbox("Actions")
+MC:AddButton("Stop Replay",StopReplay)
+
 ThemeManager:SetLibrary(Library)
 SaveManager:SetLibrary(Library)
 ThemeManager:SetFolder("WS_UI")
 SaveManager:SetFolder("WS_UI/config")
 SaveManager:BuildConfigSection(Tabs.Theme)
 ThemeManager:ApplyToTab(Tabs.Theme)
-Library.ToggleKeybind = Enum.KeyCode.RightShift
+Library.ToggleKeybind=Enum.KeyCode.RightShift
