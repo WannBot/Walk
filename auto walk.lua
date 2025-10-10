@@ -1,10 +1,9 @@
 --[[
-WS • Auto Walk (Obsidian UI v2.0)
-✅ Pause / Resume
-✅ Smart Play (nearest)
-✅ Replay Speed control
-✅ Save record to Folder "AutoWalk"
-✅ Full feature restoration
+WS • Auto Walk (Obsidian UI v2.5)
+- Fix orientasi avatar (no nyamping) via CFrame.lookAt (horizontal forward)
+- Stop Record → tambahkan sebagai Path# di Tab "Data" (tidak langsung save ke disk)
+- Tab "Data": Dropdown Path, ▶ Play, ⛔ Stop, 💾 Save All Paths (gabung), 🗑 Delete Last Path
+- Replay Speed slider (0.5x - 3x)
 ]]
 
 ----------------------------------------------------------
@@ -45,6 +44,10 @@ local allConnections = {}
 local forceSpeedMultiplier = 1.0
 local ReplaySpeed = 1.0  -- default
 
+-- Kumpulan hasil record (in-memory, bukan file)
+-- setiap item: { name="Path 1", json="<serialized>" }
+local RecordedPaths = {}
+
 ----------------------------------------------------------
 -- HELPERS
 ----------------------------------------------------------
@@ -74,7 +77,9 @@ local function startForceMovement()
 		local root, hum = character.PrimaryPart, character:FindFirstChildOfClass("Humanoid")
 		if not root or not hum or isClimbing then return end
 		local moveSpeed = hum.WalkSpeed * forceSpeedMultiplier * ReplaySpeed
-		local dir = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z).Unit
+		local dir = Vector3.new(root.CFrame.LookVector.X, 0, root.CFrame.LookVector.Z)
+		if dir.Magnitude < 1e-5 then return end
+		dir = dir.Unit
 		local vel = dir * moveSpeed
 		root.AssemblyLinearVelocity = Vector3.new(vel.X, root.AssemblyLinearVelocity.Y, vel.Z)
 	end)
@@ -111,6 +116,7 @@ end
 local function deserializePlatformData(jsonData)
 	local ok, data = pcall(function() return HttpService:JSONDecode(jsonData) end)
 	if not ok then return false end
+	-- bersihkan world sebelumnya
 	for _, p in ipairs(platforms) do p:Destroy() end
 	platforms, platformData = {}, {}
 	for _, info in ipairs(data.redPlatforms or {}) do
@@ -136,7 +142,7 @@ local function deserializePlatformData(jsonData)
 end
 
 ----------------------------------------------------------
--- RECORD & STOP RECORD
+-- RECORD & STOP RECORD (ke memory list)
 ----------------------------------------------------------
 local function StartRecord()
 	if recording then return end
@@ -171,18 +177,20 @@ local function StopRecord()
 	recording = false
 	UpdateStatus("Stopped Recording")
 
-	-- buat folder AutoWalk di device executor
-	local folder = "AutoWalk"
-	if not isfolder(folder) then makefolder(folder) end
+	-- masukkan hasil record ke list "RecordedPaths" (in-memory), tidak langsung save file
+	local json = serializePlatformData()
+	local idx = #RecordedPaths + 1
+	table.insert(RecordedPaths, { name = ("Path %d"):format(idx), json = json })
+	UpdateStatus(("Added to Data: Path %d"):format(idx))
 
-	local filename = folder .. "/record_" .. os.date("%Y%m%d_%H%M%S") .. ".json"
-	local data = serializePlatformData()
-	writefile(filename, data)
-	UpdateStatus("Saved to " .. filename)
+	-- refresh UI Data list (dropdown)
+	if getfenv().__WS_REFRESH_DATA then
+		pcall(getfenv().__WS_REFRESH_DATA)
+	end
 end
 
 ----------------------------------------------------------
--- REPLAY LOGIC
+-- REPLAY LOGIC (Fix orientasi pakai lookAt)
 ----------------------------------------------------------
 local function GetNearestPlatformIndexFromPosition(pos)
 	if #platforms == 0 then return 1 end
@@ -220,23 +228,39 @@ local function ReplayFrom(indexStart, movementStart, skipPath)
 		UpdateStatus(("Playing %d/%d"):format(i, totalPlatformsToPlay))
 		local p = platforms[i]
 		if not skipPath then walkToPlatform(p.Position + Vector3.new(0,3,0)) end
+
 		local moves = platformData[p]
 		if moves and #moves > 1 then
 			startForceMovement()
 			for j = movementStart or 1, #moves-1 do
 				if shouldStopReplay or shouldPauseReplay then
-					pausedState = {isPaused=true, platformIndex=i, movementIndex=j, skipPathfind=true}
 					stopForceMovement()
-					UpdateStatus("Paused")
+					UpdateStatus("Stopped")
 					return
 				end
 				local a, b = moves[j], moves[j+1]
-				local startTime, duration = tick(), ((b.position - a.position).Magnitude * 0.01) / ReplaySpeed
-				while tick() - startTime < duration do
+
+				-- durasi di-scale oleh ReplaySpeed
+				local distance = (b.position - a.position).Magnitude
+				local duration = math.max(distance * 0.01, 0.01) / math.max(ReplaySpeed, 0.01)
+				local t0, t1 = tick(), tick() + duration
+
+				-- arah horizontal (hindari tilt Y), untuk lookAt
+				local flatDir = Vector3.new((b.position - a.position).X, 0, (b.position - a.position).Z)
+				if flatDir.Magnitude < 1e-4 then
+					flatDir = character.PrimaryPart.CFrame.LookVector -- pertahankan arah sebelumnya
+				else
+					flatDir = flatDir.Unit
+				end
+
+				while tick() < t1 do
 					if shouldStopReplay or shouldPauseReplay then break end
-					local alpha = math.clamp((tick() - startTime) / duration, 0, 1)
+					local alpha = math.clamp((tick() - t0) / duration, 0, 1)
 					local pos = a.position:Lerp(b.position, alpha)
-					character:SetPrimaryPartCFrame(CFrame.new(pos))
+					-- Rotasi realistik: arahkan menghadap ke depan (horizontal)
+					local lookTarget = pos + Vector3.new(flatDir.X, 0, flatDir.Z)
+					character:SetPrimaryPartCFrame(CFrame.lookAt(pos, lookTarget))
+					if a.isJumping then humanoid.Jump = true end
 					RunService.Heartbeat:Wait()
 				end
 			end
@@ -248,14 +272,6 @@ local function ReplayFrom(indexStart, movementStart, skipPath)
 	replaying = false
 end
 
-local function PauseReplay() if replaying then shouldPauseReplay = true end end
-local function ResumeReplay()
-	if not pausedState.isPaused then return UpdateStatus("No paused replay") end
-	local p, m, s = pausedState.platformIndex, pausedState.movementIndex, pausedState.skipPathfind
-	pausedState.isPaused = false
-	task.spawn(function() ReplayFrom(p, m, s) end)
-end
-
 local function StopReplay()
 	if replaying then shouldStopReplay = true replaying = false stopForceMovement() end
 	UpdateStatus("Stopped ⛔")
@@ -264,7 +280,7 @@ end
 ----------------------------------------------------------
 -- OBSIDIAN UI
 ----------------------------------------------------------
-local Window = Library:CreateWindow({Title="WS",Footer="Auto Walk (v2.0)",Icon=95816097006870,ShowCustomCursor=true})
+local Window = Library:CreateWindow({Title="WS",Footer="Auto Walk (v2.5)",Icon=95816097006870,ShowCustomCursor=true})
 local Tabs = {
 	Main  = Window:AddTab("Main Control","zap"),
 	Auto  = Window:AddTab("Auto Walk","map-pin"),
@@ -278,7 +294,7 @@ local statusLabel = StatusBox:AddLabel("Status: Idle")
 getfenv().__WS_STATUS_LABEL = statusLabel
 
 ----------------------------------------------------------
--- MAIN CONTROL TAB
+-- MAIN CONTROL
 ----------------------------------------------------------
 local M = Tabs.Main:AddLeftGroupbox("Actions")
 M:AddButton("Record", StartRecord)
@@ -286,11 +302,12 @@ M:AddButton("Stop Record", StopRecord)
 M:AddButton("Stop Replay", StopReplay)
 
 ----------------------------------------------------------
--- AUTO WALK TAB
+-- AUTO WALK (untuk source path online + speed)
 ----------------------------------------------------------
 local A = Tabs.Auto:AddLeftGroupbox("Auto")
 local PathList = {"https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/allpath.json"}
 local PathsLoaded = {}
+
 A:AddButton("📥 Load Path", function()
 	PathsLoaded = {}
 	for _, url in ipairs(PathList) do
@@ -299,6 +316,7 @@ A:AddButton("📥 Load Path", function()
 	end
 	UpdateStatus(("%d Path Loaded"):format(#PathsLoaded))
 end)
+
 A:AddButton("▶ Play (Nearest)", function()
 	if #PathsLoaded == 0 then return UpdateStatus("No Path") end
 	local rp = character:WaitForChild("HumanoidRootPart")
@@ -309,13 +327,105 @@ A:AddButton("▶ Play (Nearest)", function()
 		end
 	end
 end)
-A:AddButton("⏸ Pause", PauseReplay)
-A:AddButton("⏵ Resume", ResumeReplay)
+
 A:AddButton("⛔ Stop", StopReplay)
-A:AddSlider("Speed", {Text="Replay Speed", Min=0.5, Max=3, Default=1, Rounding=1, Compact=false, Callback=function(v)
-	ReplaySpeed = v
-	UpdateStatus("Speed x"..v)
-end})
+
+A:AddSlider("Speed", {
+	Text="Replay Speed",
+	Min=0.5, Max=3, Default=1, Rounding=1, Compact=false,
+	Callback=function(v) ReplaySpeed = v UpdateStatus("Speed x"..v) end
+})
+
+----------------------------------------------------------
+-- DATA TAB: daftar path hasil record + kontrol
+----------------------------------------------------------
+local DataLeft = Tabs.Data:AddLeftGroupbox("Recorded Paths")
+local SelectedPathIndex = 1
+local PathsDropdown = nil
+
+local function buildPathNames()
+	local names = {}
+	for i, item in ipairs(RecordedPaths) do
+		names[i] = item.name or ("Path "..i)
+	end
+	if #names == 0 then names = {"(no paths)"} end
+	return names
+end
+
+local function refreshDataUI()
+	local values = buildPathNames()
+	if PathsDropdown then
+		PathsDropdown:SetValues(values)
+		PathsDropdown:SetValue(values[math.clamp(SelectedPathIndex,1,#values)])
+	end
+end
+
+-- expose untuk dipanggil dari StopRecord
+getfenv().__WS_REFRESH_DATA = refreshDataUI
+
+PathsDropdown = DataLeft:AddDropdown("WS_PathsDD", {
+	Values = buildPathNames(),
+	Default = "Select Path",
+	Multi = false,
+	Text = "Paths",
+	Callback = function(val)
+		-- map text -> index
+		for i, item in ipairs(RecordedPaths) do
+			if item.name == val then SelectedPathIndex = i return end
+		end
+		-- jika "(no paths)"
+		SelectedPathIndex = 1
+	end
+})
+
+DataLeft:AddButton("Refresh", function()
+	refreshDataUI()
+	UpdateStatus("Data refreshed")
+end)
+
+-- ▶ Play per-path (pakai ReplayFrom tanpa Pause/Resume button khusus)
+DataLeft:AddButton("▶ Play Selected", function()
+	if #RecordedPaths == 0 then return UpdateStatus("No recorded paths") end
+	local entry = RecordedPaths[math.clamp(SelectedPathIndex,1,#RecordedPaths)]
+	if not entry or not entry.json then return UpdateStatus("Invalid path") end
+	if deserializePlatformData(entry.json) then
+		task.spawn(function() ReplayFrom(1) end)
+	end
+end)
+
+-- ⛔ Stop per-path
+DataLeft:AddButton("⛔ Stop Selected", function()
+	StopReplay()
+end)
+
+-- 🗑 Hapus path terakhir dari memory list
+DataLeft:AddButton("🗑 Delete Last Path", function()
+	if #RecordedPaths == 0 then return UpdateStatus("No recorded paths") end
+	table.remove(RecordedPaths, #RecordedPaths)
+	UpdateStatus("Deleted last path from list")
+	SelectedPathIndex = math.clamp(SelectedPathIndex,1,#RecordedPaths)
+	refreshDataUI()
+end)
+
+-- 💾 Save All Paths (GABUNG ke satu file JSON)
+DataLeft:AddButton("💾 Save All Paths", function()
+	if #RecordedPaths == 0 then return UpdateStatus("Nothing to save") end
+	local folder = "AutoWalk"
+	if not isfolder(folder) then makefolder(folder) end
+
+	-- gabungkan semua ke satu file: { paths: [ {name, data:<object>} ] }
+	local bundle = { paths = {} }
+	for _, item in ipairs(RecordedPaths) do
+		local ok, obj = pcall(function() return HttpService:JSONDecode(item.json) end)
+		if ok and type(obj) == "table" then
+			table.insert(bundle.paths, { name = item.name, data = obj })
+		end
+	end
+	local out = HttpService:JSONEncode(bundle)
+	local filename = folder .. "/allpaths.json"
+	writefile(filename, out)
+	UpdateStatus("Saved → " .. filename)
+end)
 
 ----------------------------------------------------------
 -- THEME / CONFIG
@@ -327,3 +437,15 @@ SaveManager:SetFolder("WS_UI/config")
 SaveManager:BuildConfigSection(Tabs.Theme)
 ThemeManager:ApplyToTab(Tabs.Theme)
 Library.ToggleKeybind = Enum.KeyCode.RightShift
+
+----------------------------------------------------------
+-- RESPAWN SAFETY
+----------------------------------------------------------
+player.CharacterAdded:Connect(function(newChar)
+	character = newChar
+	humanoid = newChar:WaitForChild("Humanoid")
+	setupCharacterForce(newChar)
+	stopForceMovement()
+	shouldStopReplay, shouldPauseReplay, replaying = true, false, false
+	UpdateStatus("Idle (respawn)")
+end)
