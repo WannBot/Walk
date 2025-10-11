@@ -678,14 +678,6 @@ local Window = Library:CreateWindow({
     ShowCustomCursor = true,
 })
 
-local Tabs = {
-	AutoWalkTab = Window:AddTab("Auto Walk", "map-pin"),
-	Main  = Window:AddTab("Main Control", "zap"),
-	Data  = Window:AddTab("Data", "folder"),
-	List  = Window:AddTab("Platform List", "map"),
-	Theme = Window:AddTab("Setting", "settings"),
-}
-
 ---------------------------------------------------------
 -- 🧭 AUTO WALK TAB (Antartika) — FIX: Full Working
 ---------------------------------------------------------
@@ -695,6 +687,7 @@ task.spawn(function()
     end
 
     local okInit, errInit = pcall(function()
+		local AutoWalkTab = Window:AddTab("Auto Walk", "map-pin")
         local GLeft = AutoWalkTab:AddLeftGroupbox("Map Antartika")
         local autoStatus = GLeft:AddLabel("Status: Idle")
 
@@ -802,6 +795,14 @@ task.spawn(function()
         warn("[AutoWalk Tab Init Error]:", errInit)
     end
 end)
+
+
+local Tabs = {
+	Main  = Window:AddTab("Main Control", "zap"),
+	Data  = Window:AddTab("Data", "folder"),
+	List  = Window:AddTab("Platform List", "map"),
+	Theme = Window:AddTab("Setting", "settings"),
+}
 
 -- 🔧 Status Label global (pojok bawah)
 local StatusBox = Tabs.Main:AddRightGroupbox("Status")
