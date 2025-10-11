@@ -1,4 +1,3 @@
-
 --[[
 WS • Auto Walk (Obsidian UI)
 
