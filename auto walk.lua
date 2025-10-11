@@ -679,6 +679,7 @@ local Window = Library:CreateWindow({
 })
 
 local Tabs = {
+	AutoWalkTab = Window:AddTab("Auto Walk", "map-pin"),
 	Main  = Window:AddTab("Main Control", "zap"),
 	Data  = Window:AddTab("Data", "folder"),
 	List  = Window:AddTab("Platform List", "map"),
@@ -694,7 +695,6 @@ task.spawn(function()
     end
 
     local okInit, errInit = pcall(function()
-        local AutoWalkTab = Window:AddTab("Auto Walk", "map-pin")
         local GLeft = AutoWalkTab:AddLeftGroupbox("Map Antartika")
         local autoStatus = GLeft:AddLabel("Status: Idle")
 
