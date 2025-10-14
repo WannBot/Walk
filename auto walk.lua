@@ -692,11 +692,8 @@ task.spawn(function()
         local autoStatus = GLeft:AddLabel("Status: Idle")
 
         local PathList = {
-            "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path1.json",
-            "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path2.json",
-            "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path3.json",
-            "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path4.json",
-            "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/path5.json",
+            "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/allpath.json",
+            
         }
 
         local PathsLoaded = {}
