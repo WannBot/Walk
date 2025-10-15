@@ -585,15 +585,24 @@ local function walkToPlatform(destination)
     end
 end
 
-local function ReplayFrom(indexStart)
+
+local shouldPauseReplay = false
+local pausedState = {
+    isPaused = false,
+    platformIndex = nil,
+    movementIndex = 1,
+    skipPathfind = false
+}
+
+local function ReplayFrom(indexStart, movementIndexStart)
     totalPlatformsToPlay = #platforms
     currentPlatformIndex = indexStart
 
-    -- jika resume dari pause, mulai dari movement step yang tersimpan
-    local movementStartIndex = (pausedState.isPaused and pausedState.movementIndex) or 1
+    -- Jika resume dari pause, mulai dari step & platform terakhir
+    local movementStartIndex = (pausedState.isPaused and pausedState.movementIndex) or movementIndexStart or 1
     local skipPathfindWhenResuming = (pausedState.isPaused and pausedState.skipPathfind) or false
 
-    -- clear flag paused untuk start ulang loop
+    -- Bersihkan flag pause
     if pausedState.isPaused then
         pausedState.isPaused = false
     end
@@ -657,8 +666,12 @@ local function ReplayFrom(indexStart)
                     end
                     local alpha = math.clamp((tick() - startTime)/duration, 0, 1)
                     local pos = a.position:Lerp(b.position, alpha)
-                    local cfA = CFrame.fromEulerAnglesXYZ(math.rad(a.orientation.X), math.rad(a.orientation.Y), math.rad(a.orientation.Z))
-                    local cfB = CFrame.fromEulerAnglesXYZ(math.rad(b.orientation.X), math.rad(b.orientation.Y), math.rad(b.orientation.Z))
+                    local cfA = CFrame.fromEulerAnglesXYZ(
+                        math.rad(a.orientation.X), math.rad(a.orientation.Y), math.rad(a.orientation.Z)
+                    )
+                    local cfB = CFrame.fromEulerAnglesXYZ(
+                        math.rad(b.orientation.X), math.rad(b.orientation.Y), math.rad(b.orientation.Z)
+                    )
                     local rot = cfA:Lerp(cfB, alpha)
                     character:SetPrimaryPartCFrame(CFrame.new(pos) * rot)
                     if b.isJumping then humanoid.Jump = true end
@@ -681,7 +694,29 @@ local function ReplayFrom(indexStart)
     UpdateStatus("Idle")
     stopForceMovement()
 end
-                    
+
+-- === PAUSE / RESUME HANDLER ===
+local function PauseReplay()
+    if shouldPauseReplay then return end
+    shouldPauseReplay = true
+    UpdateStatus("Pausing...")
+end
+
+local function ResumeReplay()
+    if not pausedState.isPaused or not pausedState.platformIndex then
+        UpdateStatus("Tidak ada replay yang dipause")
+        return
+    end
+    shouldPauseReplay = false
+    shouldStopReplay = false
+    UpdateStatus(("Resuming ▶ Platform %d step %d"):format(
+        pausedState.platformIndex or 1,
+        pausedState.movementIndex or 1
+    ))
+    task.spawn(function()
+        ReplayFrom(pausedState.platformIndex, pausedState.movementIndex)
+    end)
+end
 
 local function PlayPlatform(index)
     if replaying then return end
@@ -908,6 +943,7 @@ GLeft:AddButton("⛔ Stop", function()
     StopReplay()  -- pakai fungsi global agar status & force move rapi
     setAutoStatus("Stopped ⛔")
         end)     
+			end)
 				
     if not okInit then
         warn("[AutoWalk Tab Init Error]:", errInit)
