@@ -4,8 +4,8 @@ local TweenService = game:GetService("TweenService")
 local player = Players.LocalPlayer or Players.PlayerAdded:Wait()
 
 -- CONFIG
-local validKey = "www"
-local scriptURL = "loadstring(game:HttpGet("https://raw.githubusercontent.com/WannBot/Walk/refs/heads/main/auto%20walk.lua"))()"
+local validKey = "Rosto123"
+local scriptURL = "https://raw.githubusercontent.com/WannBot/Walk/refs/heads/main/auto%20walk.lua"
 local getKeyURL = "https://your-getkey-url.com/"
 
 -- TUNGGU PlayerGui SIAP
