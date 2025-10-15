@@ -851,7 +851,7 @@ task.spawn(function()
         local AutoWalkTab = Window:AddTab("Auto Walk", "map-pin")
         local GLeft = AutoWalkTab:AddLeftGroupbox("Map Antartika")
         local autoStatus = GLeft:AddLabel("Status: Idle")
-	    getfenv().__AUTO_STATUS_LABEL = autoStatus
+	    getgenv().AutoWalkStatusLabel = autoStatus
 
         local PathList = {
             "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/allpath.json",
@@ -862,14 +862,11 @@ task.spawn(function()
 
         local function setAutoStatus(text)
     pcall(function()
-        if autoStatus then
-            autoStatus:Set("Status: " .. text)
-        end
-        if getfenv().__AUTO_STATUS_LABEL then
-            getfenv().__AUTO_STATUS_LABEL:Set("Status: " .. text)
+        if AutoWalkStatusLabel then
+            AutoWalkStatusLabel:Set("Status: " .. text)
         end
     end)
-				end
+end
 
         -----------------------------------------------------
         -- 📥 LOAD ALL PATHS
