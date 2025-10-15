@@ -282,9 +282,16 @@ end
 -- RECORD / STOP / DELETE / DESTROY (dibuat fungsi)
 ----------------------------------------------------------
 local function UpdateStatus(text)
-    -- setter status untuk UI Obsidian (di-assign setelah UI dibuat)
+    -- update status di Tab Main
     if getfenv().__WS_STATUS_LABEL then
-        getfenv().__WS_STATUS_LABEL:SetText("Status: "..text)
+        getfenv().__WS_STATUS_LABEL:SetText("Status: " .. text)
+    end
+
+    -- update status di Tab Auto Walk (jika sudah ada)
+    if getgenv().AutoWalkStatusLabel then
+        pcall(function()
+            getgenv().AutoWalkStatusLabel:Set("Status: " .. text)
+        end)
     end
 end
 
@@ -851,7 +858,22 @@ task.spawn(function()
         local AutoWalkTab = Window:AddTab("Auto Walk", "map-pin")
         local GLeft = AutoWalkTab:AddLeftGroupbox("Map Antartika")
         local autoStatus = GLeft:AddLabel("Status: Idle")
-	    getgenv().AutoWalkStatusLabel = autoStatus
+
+-- Pastikan label ini global agar bisa diakses ReplayFrom dan lainnya
+getgenv().AutoWalkStatusLabel = autoStatus
+
+-- Fungsi aman update status
+getgenv().setAutoStatus = function(text)
+    task.spawn(function()
+        -- tunggu label benar-benar terbuat
+        while not AutoWalkStatusLabel do
+            task.wait(0.1)
+        end
+        pcall(function()
+            AutoWalkStatusLabel:Set("Status: " .. text)
+        end)
+    end)
+				end
 
         local PathList = {
             "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/allpath.json",
@@ -860,13 +882,7 @@ task.spawn(function()
         local PathsLoaded = {}
         local isReplaying_AW, shouldStop_AW = false, false
 
-        local function setAutoStatus(text)
-    pcall(function()
-        if AutoWalkStatusLabel then
-            AutoWalkStatusLabel:Set("Status: " .. text)
-        end
-    end)
-end
+        
 
         -----------------------------------------------------
         -- 📥 LOAD ALL PATHS
