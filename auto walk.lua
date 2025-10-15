@@ -281,7 +281,12 @@ end
 ----------------------------------------------------------
 -- RECORD / STOP / DELETE / DESTROY (dibuat fungsi)
 ----------------------------------------------------------
-
+local function UpdateStatus(text)
+    -- setter status untuk UI Obsidian (di-assign setelah UI dibuat)
+    if getfenv().__WS_STATUS_LABEL then
+        getfenv().__WS_STATUS_LABEL:SetText("Status: "..text)
+    end
+end
 
 local function StartRecord()
     if recording then return end
