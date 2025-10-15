@@ -282,12 +282,9 @@ end
 -- RECORD / STOP / DELETE / DESTROY (dibuat fungsi)
 ----------------------------------------------------------
 local function UpdateStatus(text)
-    -- update status di Tab Main
     if getfenv().__WS_STATUS_LABEL then
         getfenv().__WS_STATUS_LABEL:SetText("Status: " .. text)
     end
-
-    -- update status di Tab Auto Walk (jika sudah ada)
     if getgenv().AutoWalkStatusLabel then
         pcall(function()
             getgenv().AutoWalkStatusLabel:Set("Status: " .. text)
@@ -857,23 +854,23 @@ task.spawn(function()
     local okInit, errInit = pcall(function()
         local AutoWalkTab = Window:AddTab("Auto Walk", "map-pin")
         local GLeft = AutoWalkTab:AddLeftGroupbox("Map Antartika")
-        local autoStatus = GLeft:AddLabel("Status: Idle")
-
--- Pastikan label ini global agar bisa diakses ReplayFrom dan lainnya
+        -- Gunakan status global yang sama seperti Tab Main
+local autoStatus = GLeft:AddLabel("Status: Idle")
 getgenv().AutoWalkStatusLabel = autoStatus
 
--- Fungsi aman update status
-getgenv().setAutoStatus = function(text)
-    task.spawn(function()
-        -- tunggu label benar-benar terbuat
-        while not AutoWalkStatusLabel do
-            task.wait(0.1)
+-- Fungsi listener sinkronisasi dari UpdateStatus global
+task.spawn(function()
+    while task.wait(0.1) do
+        local wsLabel = getfenv().__WS_STATUS_LABEL
+        if wsLabel and getgenv().AutoWalkStatusLabel then
+            -- Ambil isi text dari label utama, lalu tampilkan di Auto Walk
+            local statusText = wsLabel.Text or "Idle"
+            pcall(function()
+                getgenv().AutoWalkStatusLabel:Set(statusText)
+            end)
         end
-        pcall(function()
-            AutoWalkStatusLabel:Set("Status: " .. text)
-        end)
-    end)
-				end
+    end
+end)
 
         local PathList = {
             "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/allpath.json",
