@@ -287,7 +287,7 @@ local function UpdateStatus(text)
     end
     if getgenv().AutoWalkStatusLabel then
         pcall(function()
-            getgenv().AutoWalkStatusLabel:Set("Status: " .. text)
+            getgenv().AutoWalkStatusLabel:SetText("Status: " .. text)
         end)
     end
 end
@@ -861,7 +861,7 @@ getgenv().AutoWalkStatusLabel = autoStatus
 local function setAutoStatus(text)
     pcall(function()
         if getgenv().AutoWalkStatusLabel then
-            getgenv().AutoWalkStatusLabel:Set("Status: " .. text)
+            getgenv().AutoWalkStatusLabel:SetText("Status: " .. text)
         end
         UpdateStatus(text) -- panggil juga label utama
     end)
