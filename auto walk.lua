@@ -908,8 +908,7 @@ GLeft:AddButton("⛔ Stop", function()
     StopReplay()  -- pakai fungsi global agar status & force move rapi
     setAutoStatus("Stopped ⛔")
         end)     
-    end)
-	
+				
     if not okInit then
         warn("[AutoWalk Tab Init Error]:", errInit)
     end
