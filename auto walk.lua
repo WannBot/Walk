@@ -854,23 +854,18 @@ task.spawn(function()
     local okInit, errInit = pcall(function()
         local AutoWalkTab = Window:AddTab("Auto Walk", "map-pin")
         local GLeft = AutoWalkTab:AddLeftGroupbox("Map Antartika")
-        -- Gunakan status global yang sama seperti Tab Main
-local autoStatus = GLeft:AddLabel("Status: Idle")
+        local autoStatus = GLeft:AddLabel("Status: Idle")
 getgenv().AutoWalkStatusLabel = autoStatus
 
--- Fungsi listener sinkronisasi dari UpdateStatus global
-task.spawn(function()
-    while task.wait(0.1) do
-        local wsLabel = getfenv().__WS_STATUS_LABEL
-        if wsLabel and getgenv().AutoWalkStatusLabel then
-            -- Ambil isi text dari label utama, lalu tampilkan di Auto Walk
-            local statusText = wsLabel.Text or "Idle"
-            pcall(function()
-                getgenv().AutoWalkStatusLabel:Set(statusText)
-            end)
+-- versi baru: sinkron langsung lewat UpdateStatus global
+local function setAutoStatus(text)
+    pcall(function()
+        if getgenv().AutoWalkStatusLabel then
+            getgenv().AutoWalkStatusLabel:Set("Status: " .. text)
         end
-    end
-end)
+        UpdateStatus(text) -- panggil juga label utama
+    end)
+				end
 
         local PathList = {
             "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/allpath.json",
