@@ -5,7 +5,7 @@ local player = Players.LocalPlayer
 
 -- CONFIG
 local validKey = "123"
-local scriptURL = "loadstring(game:HttpGet("https://raw.githubusercontent.com/WannBot/Walk/refs/heads/main/auto%20walk.lua"))()"
+local scriptURL = "https://raw.githubusercontent.com/WannBot/Walk/refs/heads/main/auto%20walk.lua"
 local getKeyURL = "https://your-getkey-url.com/"
 
 -- GUI SETUP
