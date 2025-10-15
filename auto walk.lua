@@ -594,6 +594,25 @@ local pausedState = {
     skipPathfind = false
 }
 
+-- Cari platform terdekat dari posisi pemain
+local function GetNearestPlatformIndex()
+    if #platforms == 0 then return 1 end
+    local root = character and character:FindFirstChild("HumanoidRootPart")
+    if not root then return 1 end
+
+    local nearestIndex, nearestDist = 1, math.huge
+    for i, platform in ipairs(platforms) do
+        if platform and platform:IsA("BasePart") then
+            local dist = (root.Position - platform.Position).Magnitude
+            if dist < nearestDist then
+                nearestDist = dist
+                nearestIndex = i
+            end
+        end
+    end
+    return nearestIndex
+end
+
 local function ReplayFrom(indexStart, movementIndexStart)
     totalPlatformsToPlay = #platforms
     currentPlatformIndex = indexStart
@@ -903,8 +922,10 @@ GLeft:AddButton("▶ Play", function()
                 setAutoStatus(("Replaying Path %d ▶"):format(i))
                 replaying = true
                 local okPlay = pcall(function()
-                    ReplayFrom(1)
-                end)
+    local nearest = GetNearestPlatformIndex()
+    setAutoStatus(("Nearest Platform: %d"):format(nearest))
+    ReplayFrom(nearest)
+end)
                 replaying = false
                 if not okPlay then
                     warn("[AutoWalk] Replay error on Path "..i)
