@@ -282,9 +282,11 @@ end
 -- RECORD / STOP / DELETE / DESTROY (dibuat fungsi)
 ----------------------------------------------------------
 local function UpdateStatus(text)
-    -- setter status untuk UI Obsidian (di-assign setelah UI dibuat)
     if getfenv().__WS_STATUS_LABEL then
-        getfenv().__WS_STATUS_LABEL:SetText("Status: "..text)
+        getfenv().__WS_STATUS_LABEL:SetText("Status: " .. text)
+    end
+    if getfenv().__AUTO_STATUS_LABEL then
+        getfenv().__AUTO_STATUS_LABEL:Set("Status: " .. text)
     end
 end
 
@@ -851,6 +853,7 @@ task.spawn(function()
         local AutoWalkTab = Window:AddTab("Auto Walk", "map-pin")
         local GLeft = AutoWalkTab:AddLeftGroupbox("Map Antartika")
         local autoStatus = GLeft:AddLabel("Status: Idle")
+	    getfenv().__AUTO_STATUS_LABEL = autoStatus
 
         local PathList = {
             "https://raw.githubusercontent.com/WannBot/Walk/main/Antartika/allpath.json",
@@ -860,8 +863,15 @@ task.spawn(function()
         local isReplaying_AW, shouldStop_AW = false, false
 
         local function setAutoStatus(text)
-            pcall(function() autoStatus:Set("Status: " .. text) end)
+    pcall(function()
+        if autoStatus then
+            autoStatus:Set("Status: " .. text)
         end
+        if getfenv().__AUTO_STATUS_LABEL then
+            getfenv().__AUTO_STATUS_LABEL:Set("Status: " .. text)
+        end
+    end)
+				end
 
         -----------------------------------------------------
         -- 📥 LOAD ALL PATHS
