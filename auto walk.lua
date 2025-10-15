@@ -50,14 +50,34 @@ local shouldStopReplay = false
 local currentPlatformIndex = 0
 local totalPlatformsToPlay = 0
 
--- >>> PAUSE/RESUME (BARU, TANPA MENGGANGGU STRUKTUR LAIN)
+-- === PAUSE / RESUME STATE ===
 local shouldPauseReplay = false
 local pausedState = {
     isPaused = false,
-    platformIndex = nil,
-    movementIndex = nil,   -- step di dalam movements (1..#movements-1)
-    skipPathfind = false,  -- kalau resume di tengah movement, pathfind tidak diulang
+    platformIndex = nil,   -- index platform saat pause
+    movementIndex = 1,     -- step movement dalam platform (1..#movements-1)
+    skipPathfind = false,  -- resume tidak perlu pathfind ulang kalau pause di tengah movement
 }
+
+-- === PAUSE / RESUME API ===
+local function PauseReplay()
+    -- tidak perlu cek 'replaying', biar bisa dipencet kapan pun saat replay
+    if shouldStopReplay then return end
+    shouldPauseReplay = true
+    UpdateStatus("Pausing...")
+end
+
+local function ResumeReplay()
+    if not pausedState.isPaused or not pausedState.platformIndex then
+        UpdateStatus("Nothing to resume")
+        return
+    end
+    shouldPauseReplay = false
+    UpdateStatus(("Resuming @P%d step %d"):format(pausedState.platformIndex, pausedState.movementIndex or 1))
+    task.spawn(function()
+        ReplayFrom(pausedState.platformIndex)  -- movementIndex akan dipakai di ReplayFrom (lihat patch #2)
+    end)
+end
 
 -- Force movement
 local forceActiveConnection = nil
@@ -569,13 +589,12 @@ local function ReplayFrom(indexStart)
     totalPlatformsToPlay = #platforms
     currentPlatformIndex = indexStart
 
-    -- normalisasi movementStartIndex saat resume
-    local movementStartIndex = pausedState.isPaused and pausedState.movementIndex or 1
-    local skipPathfindWhenResuming = pausedState.isPaused and pausedState.skipPathfind or false
+    -- jika resume dari pause, mulai dari movement step yang tersimpan
+    local movementStartIndex = (pausedState.isPaused and pausedState.movementIndex) or 1
+    local skipPathfindWhenResuming = (pausedState.isPaused and pausedState.skipPathfind) or false
 
-    -- reset flag pause agar loop bisa jalan
+    -- clear flag paused untuk start ulang loop
     if pausedState.isPaused then
-        shouldPauseReplay = false
         pausedState.isPaused = false
     end
 
@@ -585,7 +604,7 @@ local function ReplayFrom(indexStart)
         UpdateStatus(("Playing from Platform %d/%d"):format(currentPlatformIndex, totalPlatformsToPlay))
         local currentPlatform = platforms[i]
 
-        -- Phase 1: pathfind ke platform (kecuali kalau resume di tengah movement)
+        -- Phase 1: pathfind ke platform (kecuali resume di tengah movement)
         if not skipPathfindWhenResuming then
             stopForceMovement()
             walkToPlatform(currentPlatform.Position + Vector3.new(0,3,0))
@@ -600,7 +619,7 @@ local function ReplayFrom(indexStart)
             end
         end
 
-        -- Phase 2: interpolasi movement (dengan dukungan pause)
+        -- Phase 2: interpolasi movement
         local movements = platformData[currentPlatform]
         if movements and #movements > 1 then
             startForceMovement()
@@ -662,6 +681,7 @@ local function ReplayFrom(indexStart)
     UpdateStatus("Idle")
     stopForceMovement()
 end
+                    
 
 local function PlayPlatform(index)
     if replaying then return end
@@ -821,90 +841,73 @@ task.spawn(function()
 		-----------------------------------------------------
         -- ▶ PLAY ALL PATHS (gunakan ReplayFrom)
         -----------------------------------------------------
-        GLeft:AddButton("▶ Play", function()
-            task.spawn(function()
-                if isReplaying_AW then return end
-                if #PathsLoaded == 0 then
-                    setAutoStatus("No Path Loaded")
-                    return
-                end
+        
+        -- ▶ Play
+GLeft:AddButton("▶ Play", function()
+    task.spawn(function()
+        if #PathsLoaded == 0 then
+            setAutoStatus("No Path Loaded")
+            return
+        end
 
-                isReplaying_AW, shouldStop_AW = true, false
-                setAutoStatus("Playing...")
+        -- reset flag global
+        shouldStopReplay = false
+        shouldPauseReplay = false
+        pausedState = { isPaused=false, platformIndex=nil, movementIndex=1, skipPathfind=false }
 
-                for i, jsonData in ipairs(PathsLoaded) do
-                    if shouldStop_AW then break end
+        setAutoStatus("Playing...")
+        for i, jsonData in ipairs(PathsLoaded) do
+            if shouldStopReplay then break end
 
-                    setAutoStatus(("Loading Path %d..."):format(i))
-                    local okDes = pcall(function()
-                        deserializePlatformData(jsonData)
-                    end)
-
-                    if okDes then
-                        setAutoStatus(("Replaying Path %d ▶"):format(i))
-                        local okPlay = pcall(function()
-                            -- saat AW Play, pastikan flag pause global bersih
-                            shouldPauseReplay = false
-                            pausedState = { isPaused=false, platformIndex=nil, movementIndex=nil, skipPathfind=false }
-                            ReplayFrom(1)
-                        end)
-                        if not okPlay then
-                            warn("[AutoWalk] Replay error on Path "..i)
-                        end
-                    else
-                        warn("[AutoWalk] Deserialize error Path "..i)
-                    end
-                    task.wait(0.3)
-                end
-
-                isReplaying_AW = false
-                if shouldStop_AW then
-                    setAutoStatus("Stopped ⛔")
-                else
-                    setAutoStatus("Completed ✅")
-                end
+            setAutoStatus(("Loading Path %d..."):format(i))
+            local okDes = pcall(function()
+                deserializePlatformData(jsonData)
             end)
-        end)
 
-        -----------------------------------------------------
-        -- ⏸ PAUSE (BARU) — simpan titik terakhir dan break halus
-        -----------------------------------------------------
-        GLeft:AddButton("⏸ Pause", function()
-            if replaying and not shouldPauseReplay then
-                shouldPauseReplay = true
-                setAutoStatus("Pausing...")
-            else
-                setAutoStatus("Not replaying")
-            end
-        end)
-
-        -----------------------------------------------------
-        -- ▶ RESUME (BARU) — lanjut dari titik pause, tanpa ulang dari awal
-        -----------------------------------------------------
-        GLeft:AddButton("▶ Resume", function()
-            if pausedState.isPaused and pausedState.platformIndex then
-                setAutoStatus(("Resuming @P%d"):format(pausedState.platformIndex))
-                -- jalankan lagi dari index & step terakhir
-                shouldPauseReplay = false
-                task.spawn(function()
-                    ReplayFrom(pausedState.platformIndex)
+            if okDes then
+                setAutoStatus(("Replaying Path %d ▶"):format(i))
+                replaying = true
+                local okPlay = pcall(function()
+                    ReplayFrom(1)
                 end)
+                replaying = false
+                if not okPlay then
+                    warn("[AutoWalk] Replay error on Path "..i)
+                end
             else
-                setAutoStatus("Nothing paused")
+                warn("[AutoWalk] Deserialize error Path "..i)
             end
-        end)
+            task.wait(0.3)
+        end
 
-        -----------------------------------------------------
-        -- ⛔ STOP
-        -----------------------------------------------------
-        GLeft:AddButton("⛔ Stop", function()
-            shouldStop_AW = true
-            isReplaying_AW = false
-            shouldPauseReplay = false
-            pausedState = { isPaused=false, platformIndex=nil, movementIndex=nil, skipPathfind=false }
-            pcall(stopForceMovement)
+        if shouldStopReplay then
             setAutoStatus("Stopped ⛔")
-        end)
+        else
+            setAutoStatus("Completed ✅")
+        end
+    end)
+end)
+
+-- ⏸ Pause
+GLeft:AddButton("⏸ Pause", function()
+    PauseReplay()
+    setAutoStatus("Paused ⏸")
+end)
+
+-- ▶ Resume
+GLeft:AddButton("▶ Resume", function()
+    ResumeReplay()
+    setAutoStatus("Resumed ▶")
+end)
+
+-- ⛔ Stop
+GLeft:AddButton("⛔ Stop", function()
+    shouldStopReplay = true
+    shouldPauseReplay = false
+    pausedState = { isPaused=false, platformIndex=nil, movementIndex=1, skipPathfind=false }
+    StopReplay()  -- pakai fungsi global agar status & force move rapi
+    setAutoStatus("Stopped ⛔")
+        end)     
     end)
 	
     if not okInit then
