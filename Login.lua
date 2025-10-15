@@ -1,4 +1,4 @@
---// LOGIN UI by WANDEV v5.1 (BotResi Key System - POST)
+--// LOGIN UI by WANDEV v6.0 (BotResi Key Integration Final)
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
@@ -8,13 +8,13 @@ local player = Players.LocalPlayer or Players.PlayerAdded:Wait()
 -- CONFIG
 local validateEndpoint = "https://botresi.xyz/keygen/api/validate.php"
 local getKeyURL = "https://botresi.xyz/keygen/admin_generate.php"
-local scriptURL = "https://your-domain.com/main.lua"
+local scriptURL = "https://your-domain.com/main.lua" -- ubah ke script utama kamu
 
--- Wait for PlayerGui
+-- Wait for GUI
 repeat task.wait() until player:FindFirstChild("PlayerGui")
 local guiParent = player.PlayerGui
 
--- Blur background
+-- Background blur
 local blur = Instance.new("BlurEffect", Lighting)
 blur.Size = 0
 TweenService:Create(blur, TweenInfo.new(0.4), {Size = 10}):Play()
@@ -25,7 +25,7 @@ screenGui.Name = "KeyLoginUI"
 screenGui.IgnoreGuiInset = true
 screenGui.ResetOnSpawn = false
 
--- Frame (kotak elegan)
+-- Frame (kotak modern)
 local frame = Instance.new("Frame", screenGui)
 frame.AnchorPoint = Vector2.new(0.5, 0.5)
 frame.Position = UDim2.new(0.5, 0, 0.5, 0)
@@ -33,17 +33,18 @@ frame.Size = UDim2.new(0.8, 0, 0.6, 0)
 frame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 frame.BorderSizePixel = 0
 
--- Border Neon
+-- Border neon animasi
 local border = Instance.new("UIStroke", frame)
 border.Thickness = 3
 border.Color = Color3.fromRGB(0, 255, 255)
 border.Transparency = 0.4
+
 task.spawn(function()
 	while frame.Parent do
-		local a = TweenService:Create(border, TweenInfo.new(1.2), {Transparency = 0.1})
-		a:Play(); a.Completed:Wait()
-		local b = TweenService:Create(border, TweenInfo.new(1.2), {Transparency = 0.4})
-		b:Play(); b.Completed:Wait()
+		local t1 = TweenService:Create(border, TweenInfo.new(1.2), {Transparency = 0.1})
+		t1:Play(); t1.Completed:Wait()
+		local t2 = TweenService:Create(border, TweenInfo.new(1.2), {Transparency = 0.4})
+		t2:Play(); t2.Completed:Wait()
 	end
 end)
 
@@ -55,7 +56,7 @@ avatar.Size = UDim2.new(0.32, 0, 0.55, 0)
 avatar.BackgroundTransparency = 1
 avatar.Image = "https://www.roblox.com/headshot-thumbnail/image?userId="..player.UserId.."&width=150&height=150&format=png"
 
--- Hello text animation
+-- Hello text (animasi mengetik)
 local hello = Instance.new("TextLabel", frame)
 hello.Position = UDim2.new(0.43, 0, 0.1, 0)
 hello.Size = UDim2.new(0.5, 0, 0.12, 0)
@@ -73,7 +74,7 @@ task.spawn(function()
 	end
 end)
 
--- Input key
+-- Input Key
 local input = Instance.new("TextBox", frame)
 input.Position = UDim2.new(0.43, 0, 0.33, 0)
 input.Size = UDim2.new(0.5, 0, 0.13, 0)
@@ -115,7 +116,7 @@ status.TextSize = 16
 status.TextColor3 = Color3.fromRGB(255,200,100)
 status.Text = ""
 
--- Fungsi Validasi (POST)
+-- Fungsi validasi POST (mengikuti format JSON server)
 local function validateKey(key)
 	local ok, resp = pcall(function()
 		local body = "key=" .. HttpService:UrlEncode(key)
@@ -126,15 +127,22 @@ local function validateKey(key)
 		return false, "Server error: " .. tostring(resp)
 	end
 
-	local low = string.lower(resp)
-	if low:find("valid") and not low:find("invalid") then
-		return true, resp
+	local success, data = pcall(function()
+		return HttpService:JSONDecode(resp)
+	end)
+
+	if success and data.valid == true then
+		local sisa = tonumber(data.expires_in_seconds) or 0
+		local jam = math.floor(sisa / 3600)
+		local menit = math.floor((sisa % 3600) / 60)
+		local info = "Berlaku " .. jam .. " jam " .. menit .. " menit lagi"
+		return true, info
 	else
-		return false, resp
+		return false, "Key invalid atau expired"
 	end
 end
 
--- Unlock Button
+-- Tombol Unlock
 unlockBtn.MouseButton1Click:Connect(function()
 	local key = string.gsub(input.Text or "", "%s+", "")
 	if key == "" then
@@ -143,21 +151,20 @@ unlockBtn.MouseButton1Click:Connect(function()
 	end
 
 	status.Text = "⏳ Memeriksa key..."
-	local ok, resp = validateKey(key)
+	local ok, info = validateKey(key)
 	if ok then
-		status.Text = "✅ Key valid! Memuat script..."
-		task.wait(1)
+		status.Text = "✅ Key valid! " .. info
+		task.wait(1.5)
 		TweenService:Create(blur, TweenInfo.new(0.3), {Size = 0}):Play()
 		blur:Destroy()
 		screenGui:Destroy()
 		loadstring(game:HttpGet(scriptURL))()
 	else
-		status.Text = "❌ Key tidak valid."
-		warn("[BotResi Response]:", resp)
+		status.Text = "❌ " .. info
 	end
 end)
 
--- Copy Button
+-- Tombol Copy
 copyBtn.MouseButton1Click:Connect(function()
 	if setclipboard then
 		setclipboard(getKeyURL)
@@ -167,4 +174,4 @@ copyBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
-print("[BotResi] UI login aktif — POST ke", validateEndpoint)
+print("[✅ BotResi] Login UI aktif & sinkron penuh dengan API validate.php")
