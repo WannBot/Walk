@@ -281,14 +281,7 @@ end
 ----------------------------------------------------------
 -- RECORD / STOP / DELETE / DESTROY (dibuat fungsi)
 ----------------------------------------------------------
-local function UpdateStatus(text)
-    if getfenv().__WS_STATUS_LABEL then
-        getfenv().__WS_STATUS_LABEL:SetText("Status: " .. text)
-    end
-    if getfenv().__AUTO_STATUS_LABEL then
-        getfenv().__AUTO_STATUS_LABEL:Set("Status: " .. text)
-    end
-end
+
 
 local function StartRecord()
     if recording then return end
