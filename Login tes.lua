@@ -1,19 +1,16 @@
--- Contoh: Login Key menggunakan Obsidian UI
--- Pastikan executor mendukung HttpRequest/HttpService dan HttpEnabled = true
-
+-- 🔐 Login Key UI Obsidian (Versi fix tampil input & tombol)
 local HttpService = game:GetService("HttpService")
-local Players = game:GetService("Players")
-local player = Players.LocalPlayer
 
--- load Obsidian (sesuaikan URL jika beda)
+-- Load Obsidian Library
 local OBS_REPO = "https://raw.githubusercontent.com/deividcomsono/Obsidian/main/"
 local Library = loadstring(game:HttpGet(OBS_REPO.."Library.lua"))()
+local ThemeManager = loadstring(game:HttpGet(OBS_REPO.."addons/ThemeManager.lua"))()
 local SaveManager  = loadstring(game:HttpGet(OBS_REPO.."addons/SaveManager.lua"))()
 
--- ganti jadi endpoint verifikasi key milikmu
+-- URL API
 local API_URL = "https://botresi.xyz/keygen/api/validate.php"
 
--- helper: ubah durasi seconds -> human readable (contoh server mungkin beri seconds)
+-- Fungsi ubah durasi ke tulisan
 local function humanDuration(seconds)
     seconds = tonumber(seconds) or 0
     if seconds <= 0 then return "Expired" end
@@ -28,80 +25,77 @@ local function humanDuration(seconds)
     end
 end
 
--- Create UI
+-- 🪟 Buat Window & Tab
 local Window = Library:CreateWindow({
-    Title = "Auth Key",
-    Size = UDim2.new(0, 360, 0, 180),
+    Title = "Botresi Key Login",
+    Size = UDim2.new(0, 400, 0, 230),
 })
 
-local section = Window:CreateSection("Login menggunakan Key")
+local Tab = Window:CreateTab({
+    Title = "Auth 🔑",
+    Icon = "rbxassetid://7743868255"
+})
 
-local keyInput = section:CreateTextBox({
-    Text = "",
+-- 🧩 Section utama
+local Section = Tab:CreateSection("Masukkan Key untuk Login")
+
+-- Input Key
+local KeyInput = Section:AddTextbox({
+    Title = "Input Key",
+    Default = "",
     Placeholder = "Masukkan key di sini...",
-    ClearTextOnFocus = false,
+    Callback = function() end
 })
 
-local statusLabel = section:CreateLabel("Status: Idle")
+-- Label status
+local StatusLabel = Section:AddLabel({ Title = "Status: Idle" })
 
-local loginBtn = section:CreateButton({
-    Text = "Login",
+-- Tombol Login
+Section:AddButton({
+    Title = "Login Sekarang",
     Callback = function()
-        local key = keyInput.Text or ""
+        local key = KeyInput.Value or ""
         if key == "" then
-            statusLabel:SetText("Status: Masukkan key dulu")
+            StatusLabel:SetTitle("Status: Masukkan key terlebih dahulu!")
             return
         end
 
-        statusLabel:SetText("Status: Memeriksa key...")
-        -- request body; sesuaikan format API (POST/GET)
-        local ok, result = pcall(function()
-            -- contoh POST JSON
+        StatusLabel:SetTitle("Status: Memeriksa key...")
+
+        local success, result = pcall(function()
             local body = HttpService:JSONEncode({ key = key })
-            local resp = HttpService:PostAsync(API_URL, body, Enum.HttpContentType.ApplicationJson)
-            return resp
+            return HttpService:PostAsync(API_URL, body, Enum.HttpContentType.ApplicationJson)
         end)
 
-        if not ok then
-            statusLabel:SetText("Status: Error koneksi. Cek HTTPExecutor.")
+        if not success then
+            StatusLabel:SetTitle("Status: Gagal koneksi ke server")
             return
         end
 
-        -- parse response (asumsi JSON)
-        local parsed
-        local success, err = pcall(function()
-            parsed = HttpService:JSONDecode(result)
-        end)
-        if not success or type(parsed) ~= "table" then
-            -- jika API mengembalikan plain text, kamu bisa adjust parsing
-            statusLabel:SetText("Status: Respon tidak valid dari server")
-            return
-        end
-
-        -- contoh struktur respons yang diharapkan:
-        -- { success = true/false, message = "string", duration_seconds = 3600, data = {...} }
-        if parsed.success then
-            local displayDuration = humanDuration(parsed.duration_seconds)
-            statusLabel:SetText("Status: Login sukses — Duration: "..displayDuration)
-            -- simpan key lokal (opsional)
-            SaveManager:Save("auth_key", key)
-            -- lakukan tindakan setelah login, mis. enable fitur
-            -- doSomethingAfterLogin(parsed.data)
+        local data = HttpService:JSONDecode(result)
+        if data.success then
+            local dur = humanDuration(data.duration_seconds or 0)
+            StatusLabel:SetTitle("Status: ✅ Key valid ("..dur..")")
         else
-            statusLabel:SetText("Status: Gagal — "..(parsed.message or "Invalid key"))
+            StatusLabel:SetTitle("Status: ❌ "..(data.message or "Key tidak valid"))
         end
-    end,
+    end
 })
 
-local saveBtn = section:CreateButton({
-    Text = "Load saved key",
+-- Tombol Load Key tersimpan (opsional)
+Section:AddButton({
+    Title = "Load Saved Key",
     Callback = function()
         local saved = SaveManager:Load("auth_key")
         if saved and saved ~= "" then
-            keyInput:SetText(saved)
-            statusLabel:SetText("Status: Key dimuat")
+            KeyInput:SetValue(saved)
+            StatusLabel:SetTitle("Status: Key dimuat dari SaveManager")
         else
-            statusLabel:SetText("Status: Tidak ada key tersimpan")
+            StatusLabel:SetTitle("Status: Tidak ada key tersimpan")
         end
-    end,
+    end
 })
+
+-- Tema
+ThemeManager:SetLibrary(Library)
+SaveManager:SetLibrary(Library)
