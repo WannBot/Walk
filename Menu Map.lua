@@ -13,7 +13,7 @@ gui.Parent = player:WaitForChild("PlayerGui")
 
 -- FRAME UTAMA
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0.8, 0, 0.7, 0)
+mainFrame.Size = UDim2.new(0.4, 0, 0.55, 0)
 mainFrame.Position = UDim2.new(0.1, 0, 0.15, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(10, 14, 18)
 mainFrame.BorderSizePixel = 0
@@ -92,7 +92,7 @@ pad.Parent = scroll
 
 -- LIST MAP
 local maps = {
-	{ name = "ANTARTICA", url = "https://raw.githubusercontent.com/WannBot/Rbx/main/Map/Antartica.lua" },
+	{ name = "ANTARTICA", url = "https://raw.githubusercontent.com/WannBot/Walk/refs/heads/main/Antartika.lua" },
 	{ name = "SOON", url = "" },
 	{ name = "SOON", url = "" },
 	{ name = "SOON", url = "" },
