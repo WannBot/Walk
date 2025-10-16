@@ -1,4 +1,4 @@
---// BOTRESI HUB LOGIN - Compact Card Style (v8)
+--// BOTRESI HUB LOGIN - Responsive Square Card UI (v9)
 local HttpService = game:GetService("HttpService")
 local TweenService = game:GetService("TweenService")
 local Lighting = game:GetService("Lighting")
@@ -22,22 +22,28 @@ screenGui.IgnoreGuiInset = true
 screenGui.ResetOnSpawn = false
 screenGui.Parent = player:WaitForChild("PlayerGui")
 
--- Frame (Card utama)
+-- Frame utama (kotak responsif)
 local frame = Instance.new("Frame", screenGui)
 frame.AnchorPoint = Vector2.new(0.5, 0.5)
 frame.Position = UDim2.new(0.5, 0, 0.5, 0)
-frame.Size = UDim2.new(0.75, 0, 0.55, 0) -- lebih kotak, tidak terlalu tinggi
+frame.Size = UDim2.new(0.4, 0, 0.55, 0) -- akan diatur ulang otomatis di bawah
 frame.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
 frame.BorderSizePixel = 0
 frame.ClipsDescendants = true
 
 local corner = Instance.new("UICorner", frame)
-corner.CornerRadius = UDim.new(0, 16)
+corner.CornerRadius = UDim.new(0, 18)
 
--- Shadow halus
+-- Border lembut
+local border = Instance.new("UIStroke", frame)
+border.Color = Color3.fromRGB(120, 90, 255)
+border.Thickness = 2
+border.Transparency = 0.3
+
+-- Shadow lembut
 local shadow = Instance.new("ImageLabel", frame)
 shadow.AnchorPoint = Vector2.new(0.5, 0.5)
-shadow.Position = UDim2.new(0.5, 0, 0.5, 8)
+shadow.Position = UDim2.new(0.5, 0, 0.5, 5)
 shadow.Size = UDim2.new(1.1, 0, 1.1, 0)
 shadow.BackgroundTransparency = 1
 shadow.Image = "rbxassetid://1316045217"
@@ -46,18 +52,12 @@ shadow.ImageColor3 = Color3.new(0, 0, 0)
 shadow.ScaleType = Enum.ScaleType.Slice
 shadow.SliceCenter = Rect.new(10,10,118,118)
 
--- Border lembut ungu kebiruan
-local border = Instance.new("UIStroke", frame)
-border.Color = Color3.fromRGB(120, 90, 255)
-border.Thickness = 2
-border.Transparency = 0.3
-
--- Avatar dengan border glow
+-- Avatar holder
 local avatarHolder = Instance.new("Frame", frame)
 avatarHolder.AnchorPoint = Vector2.new(0.5, 0)
-avatarHolder.Position = UDim2.new(0.5, 0, 0.08, 0)
-avatarHolder.Size = UDim2.new(0.3, 0, 0.3, 0)
-avatarHolder.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+avatarHolder.Position = UDim2.new(0.5, 0, 0.07, 0)
+avatarHolder.Size = UDim2.new(0.35, 0, 0.35, 0)
+avatarHolder.BackgroundColor3 = Color3.fromRGB(45, 45, 65)
 avatarHolder.BorderSizePixel = 0
 
 local avatarCorner = Instance.new("UICorner", avatarHolder)
@@ -65,39 +65,39 @@ avatarCorner.CornerRadius = UDim.new(1, 0)
 
 local avatarGlow = Instance.new("UIStroke", avatarHolder)
 avatarGlow.Thickness = 2
-avatarGlow.Color = Color3.fromRGB(160,130,255)
-avatarGlow.Transparency = 0.2
+avatarGlow.Color = Color3.fromRGB(150,130,255)
+avatarGlow.Transparency = 0.15
 
 local avatar = Instance.new("ImageLabel", avatarHolder)
 avatar.AnchorPoint = Vector2.new(0.5, 0.5)
 avatar.Position = UDim2.new(0.5, 0, 0.5, 0)
-avatar.Size = UDim2.new(0.92, 0, 0.92, 0)
+avatar.Size = UDim2.new(0.9, 0, 0.9, 0)
 avatar.BackgroundTransparency = 1
 avatar.Image = "https://www.roblox.com/headshot-thumbnail/image?userId="..player.UserId.."&width=150&height=150&format=png"
 local avatarCorner2 = Instance.new("UICorner", avatar)
 avatarCorner2.CornerRadius = UDim.new(1, 0)
 
--- Username
+-- Username label
 local username = Instance.new("TextLabel", frame)
 username.AnchorPoint = Vector2.new(0.5, 0)
-username.Position = UDim2.new(0.5, 0, 0.42, 0)
-username.Size = UDim2.new(0.8, 0, 0.08, 0)
+username.Position = UDim2.new(0.5, 0, 0.46, 0)
+username.Size = UDim2.new(0.8, 0, 0.07, 0)
 username.BackgroundTransparency = 1
 username.Font = Enum.Font.GothamBold
 username.Text = player.Name
 username.TextColor3 = Color3.fromRGB(255, 255, 255)
 username.TextScaled = true
 
--- Input Key
+-- Input key
 local input = Instance.new("TextBox", frame)
 input.AnchorPoint = Vector2.new(0.5, 0)
-input.Position = UDim2.new(0.5, 0, 0.52, 0)
-input.Size = UDim2.new(0.8, 0, 0.12, 0)
+input.Position = UDim2.new(0.5, 0, 0.56, 0)
+input.Size = UDim2.new(0.8, 0, 0.1, 0)
 input.PlaceholderText = "Masukkan key..."
 input.Font = Enum.Font.Gotham
 input.TextSize = 18
 input.TextColor3 = Color3.fromRGB(255,255,255)
-input.BackgroundColor3 = Color3.fromRGB(35, 35, 50)
+input.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
 input.Text = ""
 local inputCorner = Instance.new("UICorner", input)
 inputCorner.CornerRadius = UDim.new(0, 10)
@@ -105,8 +105,8 @@ inputCorner.CornerRadius = UDim.new(0, 10)
 -- Tombol Login (ungu)
 local loginBtn = Instance.new("TextButton", frame)
 loginBtn.AnchorPoint = Vector2.new(0.5, 0)
-loginBtn.Position = UDim2.new(0.5, 0, 0.68, 0)
-loginBtn.Size = UDim2.new(0.8, 0, 0.11, 0)
+loginBtn.Position = UDim2.new(0.5, 0, 0.7, 0)
+loginBtn.Size = UDim2.new(0.8, 0, 0.1, 0)
 loginBtn.BackgroundColor3 = Color3.fromRGB(110, 90, 255)
 loginBtn.Text = "Login"
 loginBtn.Font = Enum.Font.GothamBold
@@ -115,11 +115,11 @@ loginBtn.TextColor3 = Color3.new(1,1,1)
 local loginCorner = Instance.new("UICorner", loginBtn)
 loginCorner.CornerRadius = UDim.new(0, 10)
 
--- Tombol Get Key (hitam elegan)
+-- Tombol Get Key (gelap)
 local getKeyBtn = Instance.new("TextButton", frame)
 getKeyBtn.AnchorPoint = Vector2.new(0.5, 0)
 getKeyBtn.Position = UDim2.new(0.5, 0, 0.82, 0)
-getKeyBtn.Size = UDim2.new(0.8, 0, 0.11, 0)
+getKeyBtn.Size = UDim2.new(0.8, 0, 0.1, 0)
 getKeyBtn.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 getKeyBtn.Text = "Get Key"
 getKeyBtn.Font = Enum.Font.GothamBold
@@ -128,7 +128,7 @@ getKeyBtn.TextColor3 = Color3.new(1,1,1)
 local getKeyCorner = Instance.new("UICorner", getKeyBtn)
 getKeyCorner.CornerRadius = UDim.new(0, 10)
 
--- Label status
+-- Status label
 local status = Instance.new("TextLabel", frame)
 status.AnchorPoint = Vector2.new(0.5, 0)
 status.Position = UDim2.new(0.5, 0, 0.93, 0)
@@ -139,7 +139,22 @@ status.TextSize = 14
 status.TextColor3 = Color3.fromRGB(255, 200, 120)
 status.Text = ""
 
--- Validasi key
+-- Responsif: ubah ukuran sesuai layar
+local function adjustForScreen()
+	local aspectRatio = workspace.CurrentCamera.ViewportSize.X / workspace.CurrentCamera.ViewportSize.Y
+	if aspectRatio < 1 then
+		-- Portrait (HP vertikal)
+		frame.Size = UDim2.new(0.8, 0, 0.65, 0)
+	else
+		-- Landscape (HP miring)
+		frame.Size = UDim2.new(0.45, 0, 0.65, 0)
+	end
+end
+
+workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(adjustForScreen)
+adjustForScreen()
+
+-- Fungsi validasi
 local function validateKey(key)
 	local body = "key=" .. HttpService:UrlEncode(key)
 	local request = (http_request or request or syn and syn.request)
@@ -161,7 +176,6 @@ local function validateKey(key)
 	local success, data = pcall(function()
 		return HttpService:JSONDecode(response.Body)
 	end)
-
 	if not success or not data then
 		return false, "Respon server tidak valid"
 	end
@@ -170,8 +184,7 @@ local function validateKey(key)
 		local sisa = tonumber(data.expires_in_seconds or 0)
 		local jam = math.floor(sisa / 3600)
 		local menit = math.floor((sisa % 3600) / 60)
-		local info = ("Key aktif %d jam %d menit lagi"):format(jam, menit)
-		return true, info
+		return true, ("Key aktif %d jam %d menit lagi"):format(jam, menit)
 	else
 		return false, "Key tidak valid atau expired"
 	end
@@ -188,7 +201,7 @@ loginBtn.MouseButton1Click:Connect(function()
 	local ok, info = validateKey(key)
 	if ok then
 		status.Text = "✅ Key valid! " .. info
-		task.wait(1.5)
+		task.wait(1.2)
 		TweenService:Create(blur, TweenInfo.new(0.3), {Size = 0}):Play()
 		task.wait(0.3)
 		blur:Destroy()
@@ -209,4 +222,4 @@ getKeyBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
-print("[✅] Botresi Card Login aktif.")
+print("[✅] Botresi Card UI Responsive aktif.")
