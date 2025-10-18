@@ -599,6 +599,20 @@ local function walkToPlatform(destination)
             -- 🧗 Deteksi tangga / climb otomatis
             ------------------------------------------------------
             if deltaY > 4 then
+				-- Coba trigger prompt climb otomatis (tanpa klik manual)
+local climbObj = workspace:FindFirstChild("Ice_Climbing%.1", true)
+if climbObj then
+	local touchDetectors = climbObj:FindFirstChild("Touch_Detectors")
+	if touchDetectors and touchDetectors:FindFirstChild("Bottom") then
+		local bottom = touchDetectors.Bottom
+		local prompt = bottom:FindFirstChildOfClass("ProximityPrompt")
+		if prompt and (rootPart.Position - bottom.Position).Magnitude < 12 then
+			fireproximityprompt(prompt)
+			UpdateStatus("🧗 Auto-Trigger Climb Prompt")
+			task.wait(2) -- beri waktu visual climb aktif
+		end
+	end
+				end
                 -- Aktifkan animasi climb
                 humanoidCurrent:ChangeState(Enum.HumanoidStateType.Climbing)
 
