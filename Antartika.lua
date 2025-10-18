@@ -569,26 +569,75 @@ end
 -- REPLAY PLATFORM (disalin, DITAMBAH dukungan Pause)
 ----------------------------------------------------------
 local function walkToPlatform(destination)
-    local humanoidCurrent = character:WaitForChild("Humanoid")
-    local rootPart = character:WaitForChild("HumanoidRootPart")
-    if not humanoidCurrent or humanoidCurrent.Health <= 0 then return end
-    local path = calculatePath(rootPart.Position, destination)
-    if path.Status == Enum.PathStatus.Success then
-        local waypoints = path:GetWaypoints()
-        for _, waypoint in ipairs(waypoints) do
-            if shouldStopReplay or shouldPauseReplay then break end
-            humanoidCurrent:MoveTo(waypoint.Position)
-            if waypoint.Action == Enum.PathWaypointAction.Jump then
-                humanoidCurrent.Jump = true
-            end
-            humanoidCurrent.MoveToFinished:Wait()
-        end
-    else
-        humanoidCurrent:MoveTo(destination)
-        humanoidCurrent.MoveToFinished:Wait()
-    end
+	local humanoidCurrent = character:WaitForChild("Humanoid")
+	local rootPart = character:WaitForChild("HumanoidRootPart")
+	if not humanoidCurrent or humanoidCurrent.Health <= 0 then return end
+
+	local path = calculatePath(rootPart.Position, destination)
+	if path.Status == Enum.PathStatus.Success then
+		local waypoints = path:GetWaypoints()
+		for _, waypoint in ipairs(waypoints) do
+			if shouldStopReplay or shouldPauseReplay then break end
+
+			local deltaY = waypoint.Position.Y - rootPart.Position.Y
+			if deltaY > 4 then
+				-- >>> Tangga atau climb terdeteksi <<<
+				humanoidCurrent:ChangeState(Enum.HumanoidStateType.Climbing)
+
+				-- Buat tali visual sementara
+				local rope = Instance.new("Part")
+				rope.Name = "ClimbRope"
+				rope.Anchored = true
+				rope.CanCollide = false
+				rope.Material = Enum.Material.Fabric
+				rope.Color = Color3.fromRGB(180, 150, 100)
+				rope.Size = Vector3.new(0.2, math.abs(deltaY), 0.2)
+				rope.CFrame = CFrame.new(rootPart.Position:Lerp(waypoint.Position, 0.5))
+				rope.Parent = workspace
+
+				-- Gerak vertikal bertahap (biar tidak ngesot)
+				local step = math.sign(deltaY)
+				local totalStep = math.abs(math.floor(deltaY))
+				for n = 1, totalStep do
+					if shouldStopReplay or shouldPauseReplay then break end
+					rootPart.CFrame = rootPart.CFrame + Vector3.new(0, step, 0)
+					task.wait(0.05)
+				end
+
+				rope:Destroy()
+				humanoidCurrent:ChangeState(Enum.HumanoidStateType.Running)
+			else
+				-- Jalan datar normal
+				humanoidCurrent:MoveTo(waypoint.Position)
+				if waypoint.Action == Enum.PathWaypointAction.Jump then
+					humanoidCurrent.Jump = true
+				end
+				humanoidCurrent.MoveToFinished:Wait()
+			end
+		end
+	else
+		humanoidCurrent:MoveTo(destination)
+		humanoidCurrent.MoveToFinished:Wait()
+	end
 end
 
+-- Area climb spesifik dari map Ice_Climbing%.1
+local climbObj = workspace:FindFirstChild("Ice_Climbing%.1", true)
+if climbObj and climbObj:FindFirstChild("Touch_Detectors") then
+	local bottom = climbObj.Touch_Detectors:FindFirstChild("Bottom")
+	if bottom and bottom:FindFirstChild("Bottom") then
+		local climbPart = bottom.Bottom
+		climbPart.Touched:Connect(function(hit)
+			if hit.Parent == character then
+				local hum = character:FindFirstChildOfClass("Humanoid")
+				if hum then
+					hum:ChangeState(Enum.HumanoidStateType.Climbing)
+					UpdateStatus("🧗‍♂️ Climbing Ice Wall...")
+				end
+			end
+		end)
+	end
+end
 
 local shouldPauseReplay = false
 local pausedState = {
