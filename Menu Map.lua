@@ -90,7 +90,7 @@ pad.Parent = scroll
 -- MAP LIST
 ----------------------------------------------------
 local maps = {
-	{ name = "ANTARTICA", url = "https://raw.githubusercontent.com/WannBot/Rbx/main/Map/Antartica.lua" },
+	{ name = "ANTARTICA", url = "https://raw.githubusercontent.com/WannBot/Walk/refs/heads/main/Antartika.lua" },
 	{ name = "SOON", url = "" },
 	{ name = "SOON", url = "" },
 	{ name = "SOON", url = "" },
