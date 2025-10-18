@@ -1,4 +1,4 @@
---// Select Map UI (Final Responsive Mountain Style)
+--// Select Map UI (Auto Destroy after Click)
 --// by WanBot 2025
 
 local Players = game:GetService("Players")
@@ -15,7 +15,7 @@ gui.Parent = player:WaitForChild("PlayerGui")
 -- FRAME UTAMA
 ----------------------------------------------------
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 420, 0, 280) -- ukuran pas seperti screenshot
+mainFrame.Size = UDim2.new(0, 420, 0, 280)
 mainFrame.Position = UDim2.new(0.5, -210, 0.5, -140)
 mainFrame.BackgroundColor3 = Color3.fromRGB(10, 14, 20)
 mainFrame.BorderSizePixel = 0
@@ -28,7 +28,6 @@ local corner = Instance.new("UICorner")
 corner.CornerRadius = UDim.new(0, 18)
 corner.Parent = mainFrame
 
--- Stroke halus pinggiran
 local stroke = Instance.new("UIStroke")
 stroke.Color = Color3.fromRGB(60, 100, 255)
 stroke.Thickness = 1.5
@@ -76,7 +75,7 @@ scroll.ScrollBarImageColor3 = Color3.fromRGB(100, 160, 255)
 scroll.Parent = mainFrame
 
 local layout = Instance.new("UIGridLayout")
-layout.CellSize = UDim2.new(0.46, 0, 0.25, 0) -- responsif
+layout.CellSize = UDim2.new(0.46, 0, 0.25, 0)
 layout.CellPadding = UDim2.new(0, 10, 0, 10)
 layout.FillDirectionMaxCells = 2
 layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
@@ -100,7 +99,7 @@ local maps = {
 }
 
 ----------------------------------------------------
--- FUNGSI BUAT TOMBOL
+-- BUAT TOMBOL MAP
 ----------------------------------------------------
 local function createButton(map)
 	local button = Instance.new("TextButton")
@@ -113,7 +112,6 @@ local function createButton(map)
 	corner.CornerRadius = UDim.new(1, 0)
 	corner.Parent = button
 
-	-- Gradasi
 	local gradient = Instance.new("UIGradient")
 	gradient.Color = ColorSequence.new{
 		ColorSequenceKeypoint.new(0, Color3.fromRGB(130, 70, 255)),
@@ -121,7 +119,7 @@ local function createButton(map)
 	}
 	gradient.Parent = button
 
-	-- Ikon Gunung (emoji ⛰️ agar ringan di mobile)
+	-- Ikon Gunung
 	local icon = Instance.new("TextLabel")
 	icon.BackgroundTransparency = 1
 	icon.Text = "⛰️"
@@ -145,7 +143,7 @@ local function createButton(map)
 	lbl.TextXAlignment = Enum.TextXAlignment.Center
 	lbl.Parent = button
 
-	-- Hover animasi lembut
+	-- Hover anim
 	button.MouseEnter:Connect(function()
 		button.BackgroundColor3 = Color3.fromRGB(110, 110, 255)
 	end)
@@ -156,7 +154,10 @@ local function createButton(map)
 	-- Click Action
 	button.MouseButton1Click:Connect(function()
 		if map.url ~= "" then
+			-- Jalankan map
 			loadstring(game:HttpGet(map.url))()
+			-- Hancurkan UI setelah sukses pilih map
+			gui:Destroy()
 		else
 			game.StarterGui:SetCore("SendNotification", {
 				Title = "Coming Soon",
@@ -167,7 +168,6 @@ local function createButton(map)
 	end)
 end
 
--- Buat semua tombol
 for _, map in ipairs(maps) do
 	createButton(map)
 end
