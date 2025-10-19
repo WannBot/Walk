@@ -565,21 +565,8 @@ local function _LoadFromString(input)
     end
 end
 
--- Rope visual untuk animasi climb
-local function attachRopeEffect()
-	local rope = Instance.new("Part")
-	rope.Name = "ClimbRope"
-	rope.Anchored = true
-	rope.CanCollide = false
-	rope.Material = Enum.Material.Fabric
-	rope.Color = Color3.fromRGB(180, 150, 100)
-	rope.Size = Vector3.new(0.2, 10, 0.2)
-	rope.Parent = workspace
-	return rope
-end
-
 ----------------------------------------------------------
--- REPLAY PLATFORM: perbaikan climb + anti-ngesot
+-- REPLAY PLATFORM (disalin, DITAMBAH dukungan Pause)
 ----------------------------------------------------------
 local function walkToPlatform(destination)
     local humanoidCurrent = character:WaitForChild("Humanoid")
@@ -592,57 +579,38 @@ local function walkToPlatform(destination)
         for _, waypoint in ipairs(waypoints) do
             if shouldStopReplay or shouldPauseReplay then break end
 
-            -- Hitung beda tinggi
             local deltaY = waypoint.Position.Y - rootPart.Position.Y
+            local distance = (waypoint.Position - rootPart.Position).Magnitude
 
-            ------------------------------------------------------
-            -- 🧗 Deteksi tangga / climb otomatis
-            ------------------------------------------------------
-            if deltaY > 4 then
-				-- Coba trigger prompt climb otomatis (tanpa klik manual)
-local climbObj = workspace:FindFirstChild("Ice_Climbing%.1", true)
-if climbObj then
-	local touchDetectors = climbObj:FindFirstChild("Touch_Detectors")
-	if touchDetectors and touchDetectors:FindFirstChild("Bottom") then
-		local bottom = touchDetectors.Bottom
-		local prompt = bottom:FindFirstChildOfClass("ProximityPrompt")
-		if prompt and (rootPart.Position - bottom.Position).Magnitude < 12 then
-			fireproximityprompt(prompt)
-			UpdateStatus("🧗 Auto-Trigger Climb Prompt")
-			task.wait(2) -- beri waktu visual climb aktif
-		end
-	end
-				end
-                -- Aktifkan animasi climb
+            -- 🌄 Deteksi naik tangga / tebing curam
+            if deltaY > 4 and distance < 20 then
+                UpdateStatus("🧗 Climbing slope...")
                 humanoidCurrent:ChangeState(Enum.HumanoidStateType.Climbing)
 
-                -- Buat tali visual sementara
+                -- 🔸 Buat tali visual kecil biar realistis
                 local rope = Instance.new("Part")
-                rope.Name = "ClimbRope"
                 rope.Anchored = true
                 rope.CanCollide = false
                 rope.Material = Enum.Material.Fabric
                 rope.Color = Color3.fromRGB(180, 150, 100)
-                rope.Size = Vector3.new(0.2, math.abs(deltaY), 0.2)
-                rope.CFrame = CFrame.new(rootPart.Position:Lerp(waypoint.Position, 0.5))
+                rope.Size = Vector3.new(0.25, math.abs(deltaY), 0.25)
+                rope.CFrame = CFrame.new(rootPart.Position, waypoint.Position)
                 rope.Parent = workspace
 
-                -- Gerakan vertikal bertahap (anti-ngesot)
-                local totalStep = math.ceil(math.abs(deltaY) / 1.2)
-                for step = 1, totalStep do
+                -- 🔹 Naik vertikal halus (anti ngesot)
+                local steps = math.ceil(math.abs(deltaY))
+                for s = 1, steps do
                     if shouldStopReplay or shouldPauseReplay then break end
-                    rootPart.CFrame = rootPart.CFrame * CFrame.new(0, 1.2, -0.05)
+                    rootPart.CFrame = rootPart.CFrame + Vector3.new(0, deltaY/steps, 0)
                     task.wait(0.05)
                 end
 
-                -- Bersihkan efek & kembalikan state
-                if rope and rope.Parent then rope:Destroy() end
+                rope:Destroy()
                 humanoidCurrent:ChangeState(Enum.HumanoidStateType.Running)
+                task.wait(0.1)
 
-            ------------------------------------------------------
-            -- 🚶 Jalur datar / normal
-            ------------------------------------------------------
             else
+                -- ⚙️ Jalur normal datar
                 humanoidCurrent:MoveTo(waypoint.Position)
                 if waypoint.Action == Enum.PathWaypointAction.Jump then
                     humanoidCurrent.Jump = true
@@ -650,73 +618,12 @@ if climbObj then
                 humanoidCurrent.MoveToFinished:Wait()
             end
         end
-
     else
-        -- Jika path gagal → langsung gerakkan manual
         humanoidCurrent:MoveTo(destination)
         humanoidCurrent.MoveToFinished:Wait()
     end
 end
 
--- 🔧 Area climb spesifik dari map Ice_Climbing%.1
-local climbObj = workspace:FindFirstChild("Ice_Climbing%.1", true)
-if climbObj then
-	local touchDetectors = climbObj:FindFirstChild("Touch_Detectors")
-	if touchDetectors and touchDetectors:FindFirstChild("Bottom") then
-		local bottom = touchDetectors.Bottom
-		local prompt = bottom:FindFirstChildOfClass("ProximityPrompt")
-
-		if prompt then
-			prompt.Triggered:Connect(function(plr)
-				if plr == player then
-					local char = player.Character
-					local hum = char and char:FindFirstChildOfClass("Humanoid")
-					local root = char and char:FindFirstChild("HumanoidRootPart")
-
-					if hum and root then
-						hum:ChangeState(Enum.HumanoidStateType.Climbing)
-						UpdateStatus("🧗 Starting Ice Climb...")
-
-						-- 🎯 Tambahkan visual kapak + tali
-						local rope = Instance.new("Part")
-						rope.Name = "ClimbRope"
-						rope.Anchored = true
-						rope.CanCollide = false
-						rope.Material = Enum.Material.Fabric
-						rope.Color = Color3.fromRGB(180, 150, 100)
-						rope.Size = Vector3.new(0.2, 12, 0.2)
-						rope.CFrame = CFrame.new(root.Position) * CFrame.new(0, -6, 0)
-						rope.Parent = workspace
-
-						local axe = Instance.new("Tool")
-						axe.Name = "IceAxe"
-						local handle = Instance.new("Part")
-						handle.Name = "Handle"
-						handle.Size = Vector3.new(0.3, 1.5, 0.3)
-						handle.Material = Enum.Material.Metal
-						handle.Color = Color3.fromRGB(90, 90, 90)
-						handle.Parent = axe
-						axe.Parent = char
-						axe.RequiresHandle = true
-
-						-- 🎥 Efek panjat visual step
-						for i = 1, 10 do
-							root.CFrame = root.CFrame * CFrame.new(0, 0.8, -0.1)
-							task.wait(0.05)
-						end
-
-						-- Bersihkan visual setelah selesai climb
-						task.wait(1.5)
-						if rope and rope.Parent then rope:Destroy() end
-						if axe and axe.Parent then axe:Destroy() end
-						hum:ChangeState(Enum.HumanoidStateType.Running)
-						UpdateStatus("✅ Finished Climb")
-					end
-				end
-			end)
-		end
-	end
-end
 
 local shouldPauseReplay = false
 local pausedState = {
